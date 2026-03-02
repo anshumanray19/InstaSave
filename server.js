@@ -4,7 +4,7 @@ const fetch = require('node-fetch');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
@@ -923,5 +923,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`\n  🎬  InstaSave is running at http://localhost:${PORT}\n`);
+    console.log(`\n  🎬  InstaSave is running on port ${PORT}\n`);
 });

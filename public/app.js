@@ -154,7 +154,8 @@ async function fetchPublicMedia() {
 
     } catch (err) {
         hidePublicLoading();
-        showPublicError('Network error. Make sure the server is running at localhost:3000.');
+        console.error('Fetch error:', err);
+        showPublicError('Connection error (Check console for details). Make sure server is running.');
     }
 }
 
@@ -341,7 +342,8 @@ async function fetchProfileMedia(cursor = null) {
 
     } catch (err) {
         hideBulkLoading();
-        showBulkError('Network error. Make sure the server is running at localhost:3000.');
+        console.error('Fetch error:', err);
+        showBulkError('Connection error (Check console for details). Make sure server is running.');
     }
 }
 
@@ -650,7 +652,8 @@ async function loginWithSession() {
             showLoginError(data.error || 'Failed to connect. Check your sessionid.');
         }
     } catch (err) {
-        showLoginError('Network error. Make sure the server is running.');
+        console.error('Login error:', err);
+        showLoginError('Connection error. Check console or make sure server is running.');
     } finally {
         btnConnect.disabled = false;
         btnConnect.textContent = 'Connect';
@@ -756,7 +759,8 @@ async function fetchVideo() {
 
     } catch (err) {
         hideLoading();
-        showError('Network error. Make sure the server is running at localhost:3000.');
+        console.error('Fetch error:', err);
+        showError('Connection error (Check console for details). Make sure server is running.');
     }
 }
 
