@@ -1,0 +1,23 @@
+﻿Shortcode: DVOxQ4rE1kW -> Media ID: 3841224196836514070
+
+=== Test 1: Mobile API (newer UA) ===
+Status: 200
+Length: 44494
+Body: {"num_results":1,"more_available":false,"items":[{"strong_id__":"3841224196836514070_2047061280","disable_caption_and_comment":false,"fbid":18168338197401269,"deleted_reason":0,"client_cache_key":"Mzg0MTIyNDE5NjgzNjUxNDA3MA==.3","integrity_review_decision":"pending","pk":3841224196836514070,"id":"3841224196836514070_2047061280","has_delayed_metadata":false,"mezql_token":"","should_request_ads":false,"has_privately_liked":false,"is_quiet_post":false,"collaborator_edit_eligibility":false,"share_count_disabled":false,"is_reshare_of_text_post_app_media_in_ig":false,"is_visual_reply_commenter_notic
+
+SUCCESS! media_type=2, has_video=true, user=voompla
+Video URL: https://instagram.fbbi1-2.fna.fbcdn.net/o1/v/t16/f2/m69/AQN65OjEMPszNoS22zKhRuc-wyzlc0OP1N1f5s9e6Ox4...
+
+=== Test 2: Page scrape (follow redirects) ===
+Status: 200
+Final URL: https://www.instagram.com/reels/DVOxQ4rE1kW/
+Length: 1007649
+Has video_url: false
+Has og:video: false
+
+=== Test 3: /reels/ (plural) direct ===
+Status: 200
+Length: 853025
+Has video_url: false
+
+Done

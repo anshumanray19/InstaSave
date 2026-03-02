@@ -1,0 +1,65 @@
+﻿
+Shortcode: DVOxQ4rE1kW
+Media ID: 3841224196836514070
+Session ID: 2230932623...
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+=== Test 1: Mobile API ===
+Status: 400 Bad Request
+Response length: 240
+Body (first 500 chars): {"message":"challenge_required","challenge":{"url":"https://i.instagram.com/web/unsupported_version/","api_path":"/challenge/","hide_webview_header":false,"lock":true,"logout":false,"native_flow":false,"flow_render_type":4},"status":"fail"}
+
+=== Test 2: GraphQL Query ===
+Status: 403 Forbidden
+Response length: 21736
+Body (first 500 chars): <!DOCTYPE html>
+<html lang="en" class="no-js logged-in ">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+        <title>
+                  Page Not Found &bull; Instagram
+                </title>
+
+        
+        <meta name="robots" content="noimageindex, noarchive">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="theme-color" con
+
+=== Test 3: Page Scrape (reel URL) ===
+Status: 302 Found
+Redirect: https://www.instagram.com/reels/DVOxQ4rE1kW/
+Response length: 0
+Has video_url in HTML: false
+Has og:video meta: false
+
+Full body:
+
+
+=== Test 4: ?__a=1&__d=dis ===
+Status: 404 Not Found
+Response length: 20916
+Body (first 500 chars): <!DOCTYPE html>
+<html lang="None" class="no-js not-logged-in ">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+        <title>
+                  Page Not Found &bull; Instagram
+                </title>
+
+        
+        <meta name="robots" content="noimageindex, noarchive">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="theme-colo
+
+=== Test 5: Mobile API /reels/media/ ===
+Status: 400 Bad Request
+Response length: 240
+Body (first 500 chars): {"message":"challenge_required","challenge":{"url":"https://i.instagram.com/web/unsupported_version/","api_path":"/challenge/","hide_webview_header":false,"lock":true,"logout":false,"native_flow":false,"flow_render_type":4},"status":"fail"}
+
+Done
