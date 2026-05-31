@@ -25,21 +25,20 @@
     <!-- Header -->
     <header class="header" id="header">
         <div class="header-left">
-            <div class="logo">
-                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-                    <circle cx="12" cy="12" r="5" />
-                    <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
+            <div class="logo" id="logoLink" style="cursor: pointer;" onclick="showHomepage()">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 15V3m0 12l-4-4m4 4l4-4" />
+                    <path d="M20.3 10.5A9 9 0 1 1 12 3" />
                 </svg>
-                <span class="logo-text">InstaSave</span>
+                <span class="logo-text">OmniSave</span>
             </div>
         </div>
         <div class="header-right">
-            <div class="session-badge" id="sessionBadge">
+            <div class="session-badge" id="sessionBadge" style="display: none;">
                 <span class="session-dot"></span>
                 <span class="session-text" id="sessionText">Not Connected</span>
             </div>
-            <button class="btn-session" id="btnSession" onclick="toggleLoginModal()">
+            <button class="btn-session" id="btnSession" onclick="toggleLoginModal()" style="display: none;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                     <circle cx="12" cy="7" r="4" />
@@ -50,8 +49,15 @@
     </header>
 
     <!-- Tab Navigation -->
-    <nav class="tab-nav" id="tabNav">
+    <nav class="tab-nav" id="tabNav" style="display: none;">
         <div class="tab-nav-inner">
+            <button class="tab-btn home-nav-btn" onclick="showHomepage()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+                <span>Back to Home</span>
+            </button>
             <button class="tab-btn active" data-tab="media" onclick="switchTab('media')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -96,8 +102,151 @@
     <!-- Main Content -->
     <main class="main">
 
+        <!-- ═══════════ TAB 0: Homepage Dashboard ═══════════ -->
+        <div class="tab-content active" id="tab-home">
+            <section class="hero">
+                <h1 class="hero-title">
+                    <span class="hero-emoji">⚡</span>
+                    All-in-One Downloader
+                </h1>
+                <p class="hero-subtitle">Download high-quality videos, reels, photos, and stories from your favorite platforms</p>
+            </section>
+
+            <div class="downloader-grid">
+                <!-- Instagram Downloader Card -->
+                <div class="downloader-card glass-card brand-instagram" onclick="openDownloader('instagram')">
+                    <div class="downloader-card-header">
+                        <div class="downloader-card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                                <circle cx="12" cy="12" r="5" />
+                                <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
+                            </svg>
+                        </div>
+                        <span class="status-badge active">
+                            <span class="status-dot"></span>
+                            Active
+                        </span>
+                    </div>
+                    <h3 class="downloader-card-title">Instagram Downloader</h3>
+                    <p class="downloader-card-desc">Download reels, posts, IGTV, bulk profiles, and private content you follow.</p>
+                    <button class="downloader-card-btn">
+                        Launch Downloader
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- YouTube Downloader Card -->
+                <div class="downloader-card glass-card brand-youtube" onclick="openDownloader('youtube')">
+                    <div class="downloader-card-header">
+                        <div class="downloader-card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
+                                <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="currentColor" />
+                            </svg>
+                        </div>
+                        <span class="status-badge active">
+                            <span class="status-dot"></span>
+                            Active
+                        </span>
+                    </div>
+                    <h3 class="downloader-card-title">YouTube Downloader</h3>
+                    <p class="downloader-card-desc">Download videos in HD/4K, extract high-quality MP3 audio, and save playlists.</p>
+                    <button class="downloader-card-btn">
+                        Launch Downloader
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Snapchat Downloader Card -->
+                <div class="downloader-card glass-card brand-snapchat" onclick="openDownloader('snapchat')">
+                    <div class="downloader-card-header">
+                        <div class="downloader-card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                <path d="M12 2a5 5 0 0 0-5 5c0 2 1.5 3.5 1.5 3.5S8 11.5 7.5 12s-1.5 0-1.5.5.5 1 1 1 2-.5 2-.5 1 1.5 3 1.5 3-1.5 3-1.5 1.5.5 2 .5 1-.5 1-1-.5-.5-1-.5-1-.5-1-.5 1.5-1.5 1.5-3.5a5 5 0 0 0-5-5z" />
+                                <path d="M12 17c-2 0-4.5-1-4.5-2.5 0-.5.5-.5.5-.5s.5.5 1.5.5 2.5-.5 2.5-.5 1.5.5 2.5.5 1.5-.5 1.5-.5.5 0 .5.5c0 1.5-2.5 2.5-4.5 2.5z" />
+                            </svg>
+                        </div>
+                        <span class="status-badge coming-soon">
+                            <span class="status-dot"></span>
+                            Coming Soon
+                        </span>
+                    </div>
+                    <h3 class="downloader-card-title">Snapchat Downloader</h3>
+                    <p class="downloader-card-desc">Save public stories, spotlights, and snaps directly to your device.</p>
+                    <button class="downloader-card-btn">Learn More</button>
+                </div>
+
+                <!-- Twitter/X Downloader Card -->
+                <div class="downloader-card glass-card brand-twitter" onclick="openDownloader('twitter')">
+                    <div class="downloader-card-header">
+                        <div class="downloader-card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                <path d="M4 4l11.733 16h4.267l-11.733 -16z" />
+                                <path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" />
+                            </svg>
+                        </div>
+                        <span class="status-badge coming-soon">
+                            <span class="status-dot"></span>
+                            Coming Soon
+                        </span>
+                    </div>
+                    <h3 class="downloader-card-title">Twitter / X Downloader</h3>
+                    <p class="downloader-card-desc">Save high-resolution videos, GIFs, and image galleries from any post.</p>
+                    <button class="downloader-card-btn">Learn More</button>
+                </div>
+
+                <!-- Reddit Downloader Card -->
+                <div class="downloader-card glass-card brand-reddit" onclick="openDownloader('reddit')">
+                    <div class="downloader-card-header">
+                        <div class="downloader-card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                <circle cx="12" cy="12" r="10" />
+                                <circle cx="12" cy="12" r="3" />
+                                <circle cx="12" cy="5" r="1" />
+                                <path d="M12 6v3" />
+                                <path d="M6 12h3" />
+                                <path d="M15 12h3" />
+                            </svg>
+                        </div>
+                        <span class="status-badge coming-soon">
+                            <span class="status-dot"></span>
+                            Coming Soon
+                        </span>
+                    </div>
+                    <h3 class="downloader-card-title">Reddit Downloader</h3>
+                    <p class="downloader-card-desc">Save Reddit videos with HD sound, export image galleries and gifs.</p>
+                    <button class="downloader-card-btn">Learn More</button>
+                </div>
+
+                <!-- Threads Downloader Card -->
+                <div class="downloader-card glass-card brand-threads" onclick="openDownloader('threads')">
+                    <div class="downloader-card-header">
+                        <div class="downloader-card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c2.76 0 5.25-1.12 7.07-2.93l-1.41-1.41C16.14 19.16 14.19 20 12 20c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8v1c0 .55-.45 1-1 1s-1-.45-1-1v-1c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.63-.56 3.54-1.46.73.88 1.84 1.46 3.09 1.46 2.21 0 4-1.79 4-4v-1c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" />
+                            </svg>
+                        </div>
+                        <span class="status-badge coming-soon">
+                            <span class="status-dot"></span>
+                            Coming Soon
+                        </span>
+                    </div>
+                    <h3 class="downloader-card-title">Threads Downloader</h3>
+                    <p class="downloader-card-desc">Download videos, carousel images, and voice notes from any Threads post.</p>
+                    <button class="downloader-card-btn">Learn More</button>
+                </div>
+            </div>
+        </div>
+
         <!-- ═══════════ TAB 1: Media Downloader ═══════════ -->
-        <div class="tab-content active" id="tab-media">
+        <div class="tab-content" id="tab-media">
             <section class="hero">
                 <h1 class="hero-title">
                     <span class="hero-emoji">📷</span>
@@ -476,6 +625,102 @@
             </section>
         </div>
 
+        <!-- ═══════════ TAB 6: YouTube Downloader ═══════════ -->
+        <div class="tab-content" id="tab-youtube">
+            <section class="hero">
+                <h1 class="hero-title">
+                    <span class="hero-emoji">📺</span>
+                    YouTube Downloader
+                </h1>
+                <p class="hero-subtitle">Paste any YouTube video link to see all available resolutions and audio formats</p>
+            </section>
+
+            <section class="input-card glass-card">
+                <div class="input-wrapper">
+                    <div class="input-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
+                            <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="currentColor" />
+                        </svg>
+                    </div>
+                    <input type="url" id="ytUrlInput" class="url-input"
+                        placeholder="Paste YouTube video URL..." autocomplete="off" spellcheck="false">
+                    <button class="btn-fetch yt-btn-fetch" id="btnYtFetch" onclick="fetchYouTubeInfo()">
+                        <svg class="btn-fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" width="20" height="20">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <span class="btn-fetch-text">Analyze</span>
+                    </button>
+                </div>
+                <div class="input-hint">
+                    Supports: youtube.com/watch?v=... · youtu.be/... · YouTube Shorts · No login needed
+                </div>
+            </section>
+
+            <!-- YouTube Loading -->
+            <section class="loading-section" id="ytLoadingSection">
+                <div class="loader">
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                </div>
+                <p class="loading-text">Analyzing video and fetching available formats...</p>
+            </section>
+
+            <!-- YouTube Error -->
+            <section class="error-section glass-card" id="ytErrorSection">
+                <div class="error-icon">⚠️</div>
+                <p class="error-text" id="ytErrorText"></p>
+                <button class="btn-retry" onclick="clearYtError()">Try Again</button>
+            </section>
+
+            <!-- YouTube Results -->
+            <section class="yt-results glass-card" id="ytResultsSection">
+                <!-- Video Info Card -->
+                <div class="yt-video-info">
+                    <div class="yt-thumb-wrap">
+                        <img id="ytThumbnail" src="" alt="Thumbnail" class="yt-thumbnail">
+                        <span class="yt-duration-badge" id="ytDuration">0:00</span>
+                    </div>
+                    <div class="yt-meta">
+                        <h3 class="yt-title" id="ytTitle">Video Title</h3>
+                        <span class="yt-channel" id="ytChannel">Channel</span>
+                        <div class="yt-stats">
+                            <span class="yt-stat" id="ytViews">0 views</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Format Category Tabs -->
+                <div class="yt-format-tabs">
+                    <button class="yt-format-tab active" data-ytcat="videoaudio" onclick="switchYtFormatTab('videoaudio')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" />
+                        </svg>
+                        Video + Audio
+                    </button>
+                    <button class="yt-format-tab" data-ytcat="audio" onclick="switchYtFormatTab('audio')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <path d="M9 18V5l12-2v13" />
+                            <circle cx="6" cy="18" r="3" />
+                            <circle cx="18" cy="16" r="3" />
+                        </svg>
+                        Audio Only
+                    </button>
+                </div>
+
+                <!-- Format Tables -->
+                <div class="yt-format-panel active" id="ytPanel-videoaudio">
+                    <div class="yt-format-list" id="ytFormats-videoaudio"></div>
+                </div>
+                <div class="yt-format-panel" id="ytPanel-audio">
+                    <div class="yt-format-list" id="ytFormats-audio"></div>
+                </div>
+            </section>
+        </div>
+
         <!-- ═══════════ TAB 5: How It Works ═══════════ -->
         <div class="tab-content" id="tab-howto">
             <section class="hero">
@@ -639,10 +884,79 @@
         </div>
     </div>
 
+    <!-- Info / Coming Soon Modal -->
+    <div class="modal-overlay" id="infoModal">
+        <div class="modal glass-card" id="infoModalContent">
+            <button class="modal-close" onclick="closeInfoModal()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
+            <div class="modal-header">
+                <div class="info-modal-icon-wrapper">
+                    <div class="info-modal-icon" id="infoModalIcon">🚀</div>
+                </div>
+                <h2 class="modal-title" id="infoModalTitle">Platform Downloader</h2>
+                <span class="coming-soon-badge-modal">Development Plan</span>
+                <p class="modal-desc" style="margin-top:12px;">We are currently designing and planning this feature. Here's what we plan to support:</p>
+            </div>
+
+            <div class="features-list" id="infoModalFeatures">
+                <!-- Features dynamically inserted here -->
+            </div>
+
+            <div class="upvote-section">
+                <span class="upvote-title">Support this Feature</span>
+                <button class="btn-upvote" id="btnUpvote" onclick="upvotePlatform()">
+                    👍 Upvote Downloader (<span id="upvoteCount">0</span>)
+                </button>
+            </div>
+
+            <div class="modal-input-group" style="margin-top: 15px;">
+                <input type="email" id="notifyEmailInput" class="modal-input" placeholder="Enter your email to get notified..." autocomplete="off">
+                <button class="btn-connect" id="btnNotify" onclick="registerNotification()" style="background: var(--gradient-ig); color: white; border: none;">
+                    Notify Me
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div class="toast" id="toast">
         <span class="toast-icon" id="toastIcon">✅</span>
         <span class="toast-text" id="toastText"></span>
+    </div>
+
+    <!-- YouTube download progress modal -->
+    <div class="yt-progress-modal" id="ytProgressModal" role="status" aria-live="polite">
+        <div class="yt-progress-header">
+            <span class="yt-progress-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+            </span>
+            <div class="yt-progress-titles">
+                <div class="yt-progress-title">Preparing your download</div>
+                <div class="yt-progress-filename"></div>
+            </div>
+            <button class="yt-progress-cancel" type="button" aria-label="Cancel download" onclick="cancelYtDownload()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
+        </div>
+        <div class="yt-progress-bar-wrap">
+            <div class="yt-progress-bar"></div>
+        </div>
+        <div class="yt-progress-stats">
+            <span class="yt-progress-percent">0%</span>
+            <span class="yt-progress-info"></span>
+        </div>
+        <div class="yt-progress-phase">Starting…</div>
     </div>
 
     <script src="app.js"></script>

@@ -917,11 +917,711 @@ app.post('/api/fetch-stories', async (req, res) => {
     }
 });
 
+// ─── YOUTUBE DOWNLOADER ───────────────────────────────────────────────
+const { execFile, spawn } = require('child_process');
+
+// Bundled ffmpeg path (used for merging adaptive YouTube streams and MP3 conversion).
+// Falls back to whatever's on PATH if the package isn't available.
+let FFMPEG_PATH = null;
+try {
+    const ffPath = require('ffmpeg-static');
+    if (ffPath && require('fs').existsSync(ffPath)) {
+        FFMPEG_PATH = ffPath;
+        console.log(`[YouTube] Using bundled ffmpeg: ${FFMPEG_PATH}`);
+    }
+} catch {
+    console.log('[YouTube] ffmpeg-static not installed — relying on system ffmpeg in PATH');
+}
+
+function ffmpegArgs() {
+    return FFMPEG_PATH ? ['--ffmpeg-location', FFMPEG_PATH] : [];
+}
+
+// Helper: find yt-dlp binary (try common names)
+function getYtDlpBinary() {
+    if (process.platform === 'win32') {
+        const fs = require('fs');
+        const path = require('path');
+        
+        // 1. Try local file in project directory
+        const localPath = path.join(__dirname, 'yt-dlp.exe');
+        if (fs.existsSync(localPath)) {
+            return localPath;
+        }
+        
+        // 2. Try scanning common AppData/Programs locations for Python script binaries
+        const userProfile = process.env.USERPROFILE;
+        if (userProfile) {
+            // Check AppData\Roaming\Python\Python*\Scripts\yt-dlp.exe
+            const roamingBase = path.join(userProfile, 'AppData', 'Roaming', 'Python');
+            if (fs.existsSync(roamingBase)) {
+                try {
+                    const pyDirs = fs.readdirSync(roamingBase);
+                    for (const pyDir of pyDirs) {
+                        const target = path.join(roamingBase, pyDir, 'Scripts', 'yt-dlp.exe');
+                        if (fs.existsSync(target)) {
+                            return target;
+                        }
+                    }
+                } catch (e) {}
+            }
+            
+            // Check AppData\Local\Programs\Python\Python*\Scripts\yt-dlp.exe
+            const localBase = path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python');
+            if (fs.existsSync(localBase)) {
+                try {
+                    const pyDirs = fs.readdirSync(localBase);
+                    for (const pyDir of pyDirs) {
+                        const target = path.join(localBase, pyDir, 'Scripts', 'yt-dlp.exe');
+                        if (fs.existsSync(target)) {
+                            return target;
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+        
+        // Fall back to just 'yt-dlp.exe' if PATH is set
+        return 'yt-dlp.exe';
+    }
+    return 'yt-dlp';
+}
+
+// POST /api/youtube/info — Extract video metadata & available formats
+app.post('/api/youtube/info', async (req, res) => {
+    const { url } = req.body;
+    if (!url || !url.trim()) {
+        return res.status(400).json({ error: 'URL is required' });
+    }
+
+    const trimmedUrl = url.trim();
+
+    // Basic YouTube URL validation
+    if (!trimmedUrl.match(/(?:youtube\.com|youtu\.be|youtube-nocookie\.com)/i)) {
+        return res.status(400).json({ error: 'Please enter a valid YouTube URL.' });
+    }
+
+    console.log(`\n[YouTube] Fetching info for: ${trimmedUrl}`);
+
+    try {
+        const info = await new Promise((resolve, reject) => {
+            const ytdlp = getYtDlpBinary();
+            execFile(ytdlp, [
+                '--dump-json',
+                '--no-download',
+                '--no-warnings',
+                '--no-playlist',
+                trimmedUrl
+            ], { maxBuffer: 1024 * 1024 * 10, timeout: 30000 }, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`[YouTube] yt-dlp error: ${error.message}`);
+                    if (stderr) console.error(`[YouTube] stderr: ${stderr}`);
+                    reject(new Error(stderr || error.message));
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(stdout));
+                } catch (parseErr) {
+                    reject(new Error('Failed to parse yt-dlp output'));
+                }
+            });
+        });
+
+        // Extract video metadata
+        const title = info.title || 'Untitled';
+        const channel = info.channel || info.uploader || 'Unknown';
+        const duration = info.duration || 0;
+        const thumbnail = info.thumbnail || info.thumbnails?.[info.thumbnails.length - 1]?.url || '';
+        const viewCount = info.view_count || 0;
+        const uploadDate = info.upload_date || '';
+
+        // Process formats
+        const allFormats = info.formats || [];
+        const audioOnlyFormats = [];
+
+        // Find best audio (used for merging with video-only streams and estimating size)
+        const isAudioOnly = (fm) => fm.url && fm.acodec && fm.acodec !== 'none' && (fm.vcodec === 'none' || !fm.vcodec);
+        const bestM4aAudio = allFormats
+            .filter(fm => isAudioOnly(fm) && fm.ext === 'm4a')
+            .sort((a, b) => (b.abr || b.tbr || 0) - (a.abr || a.tbr || 0))[0];
+        const bestWebmAudio = allFormats
+            .filter(fm => isAudioOnly(fm) && fm.ext === 'webm')
+            .sort((a, b) => (b.abr || b.tbr || 0) - (a.abr || a.tbr || 0))[0];
+        const bestAnyAudio = allFormats
+            .filter(fm => isAudioOnly(fm))
+            .sort((a, b) => (b.abr || b.tbr || 0) - (a.abr || a.tbr || 0))[0];
+
+        // Bucket video formats by height — prefer progressive, fall back to video-only
+        const videoByHeight = new Map();
+
+        for (const f of allFormats) {
+            if (!f.url) continue;
+            if (f.format_note === 'storyboard') continue;
+            if (f.protocol && f.protocol.includes('m3u8')) continue;
+
+            const vcodec = f.vcodec || 'none';
+            const acodec = f.acodec || 'none';
+            const hasVideo = vcodec !== 'none';
+            const hasAudio = acodec !== 'none';
+
+            if (hasVideo) {
+                const height = f.height || 0;
+                if (height <= 0) continue;
+
+                const existing = videoByHeight.get(height);
+                const isProgressive = hasVideo && hasAudio;
+
+                // Prefer progressive over video-only; among same type prefer mp4
+                let replace = false;
+                if (!existing) {
+                    replace = true;
+                } else if (isProgressive && !existing.isProgressive) {
+                    replace = true;
+                } else if (isProgressive === existing.isProgressive) {
+                    const curIsMp4 = f.ext === 'mp4';
+                    const exIsMp4 = existing.f.ext === 'mp4';
+                    if (curIsMp4 && !exIsMp4) replace = true;
+                    else if (curIsMp4 === exIsMp4 && (f.tbr || 0) > (existing.f.tbr || 0)) replace = true;
+                }
+
+                if (replace) {
+                    videoByHeight.set(height, { f, isProgressive });
+                }
+            } else if (hasAudio) {
+                const abr = f.abr || f.tbr || 0;
+                if (abr <= 0) continue;
+
+                const label = `${Math.round(abr)}kbps`;
+                const filesize = f.filesize || f.filesize_approx || null;
+                const formatId = f.format_id;
+                const ext = f.ext || 'm4a';
+
+                audioOnlyFormats.push({
+                    formatId,
+                    type: 'audio',
+                    quality: label,
+                    abr: Math.round(abr),
+                    ext,
+                    filesize,
+                    acodec: acodec.split('.')[0],
+                });
+
+                audioOnlyFormats.push({
+                    formatId,
+                    type: 'audio',
+                    quality: label,
+                    abr: Math.round(abr),
+                    ext: 'mp3',
+                    filesize: null,
+                    acodec: 'mp3 (converted)',
+                });
+            }
+        }
+
+        // Build final video list — every resolution gets video+audio
+        const videoAudioFormats = Array.from(videoByHeight.entries()).map(([height, { f, isProgressive }]) => {
+            const vcodec = (f.vcodec || '').split('.')[0];
+            const videoSize = f.filesize || f.filesize_approx || 0;
+
+            if (isProgressive) {
+                return {
+                    formatId: f.format_id,
+                    type: 'video+audio',
+                    quality: `${height}p`,
+                    height,
+                    ext: f.ext || 'mp4',
+                    filesize: videoSize || null,
+                    fps: f.fps || null,
+                    vcodec,
+                    acodec: (f.acodec || '').split('.')[0],
+                    needsMerge: false,
+                };
+            }
+
+            // Video-only: pair with same-container audio so merge produces a clean container.
+            // CRITICAL: the fallback selector MUST repeat the video format ID — otherwise yt-dlp's
+            // `A/B` operator falls back to just-audio if the A combo can't match.
+            const videoExt = f.ext || 'mp4';
+            let audioPrimary, outputExt, audioForSize;
+            if (videoExt === 'mp4') {
+                audioPrimary = 'bestaudio[ext=m4a]';
+                outputExt = 'mp4';
+                audioForSize = bestM4aAudio || bestAnyAudio;
+            } else if (videoExt === 'webm') {
+                audioPrimary = 'bestaudio[ext=webm]';
+                outputExt = 'webm';
+                audioForSize = bestWebmAudio || bestAnyAudio;
+            } else {
+                audioPrimary = 'bestaudio';
+                outputExt = 'mkv';
+                audioForSize = bestAnyAudio;
+            }
+            const audioSize = audioForSize ? (audioForSize.filesize || audioForSize.filesize_approx || 0) : 0;
+            const mergedSize = videoSize && audioSize ? videoSize + audioSize : null;
+
+            return {
+                formatId: `${f.format_id}+${audioPrimary}/${f.format_id}+bestaudio`,
+                type: 'video+audio',
+                quality: `${height}p`,
+                height,
+                ext: outputExt,
+                filesize: mergedSize,
+                fps: f.fps || null,
+                vcodec,
+                acodec: (audioForSize?.acodec || 'aac').split('.')[0],
+                needsMerge: true,
+            };
+        });
+
+        // Dedupe audio (same label+ext) and sort
+        const seenAudio = new Set();
+        const dedupedAudio = audioOnlyFormats.filter(a => {
+            const key = `${a.quality}-${a.ext}`;
+            if (seenAudio.has(key)) return false;
+            seenAudio.add(key);
+            return true;
+        });
+
+        videoAudioFormats.sort((a, b) => b.height - a.height);
+        dedupedAudio.sort((a, b) => b.abr - a.abr);
+
+        console.log(`[YouTube] ✓ "${title}" — ${videoAudioFormats.length} video, ${dedupedAudio.length} audio`);
+
+        return res.json({
+            success: true,
+            title,
+            channel,
+            duration,
+            thumbnail,
+            viewCount,
+            uploadDate,
+            videoAudioFormats,
+            audioOnlyFormats: dedupedAudio,
+        });
+
+    } catch (err) {
+        console.error('[YouTube] Error:', err.message);
+        const msg = err.message || '';
+        if (msg.includes('is not recognized') || msg.includes('not found') || msg.includes('ENOENT')) {
+            return res.status(500).json({
+                error: 'yt-dlp is not installed on this server. Please install it: pip install yt-dlp'
+            });
+        }
+        if (msg.includes('Video unavailable') || msg.includes('Private video')) {
+            return res.status(404).json({ error: 'This video is unavailable or private.' });
+        }
+        return res.status(500).json({ error: 'Failed to fetch video info. ' + msg.substring(0, 200) });
+    }
+});
+
+// GET /api/youtube/download — Stream a specific format
+app.get('/api/youtube/download', (req, res) => {
+    const { url, formatId, filename, audioOnly } = req.query;
+
+    if (!url || !formatId) {
+        return res.status(400).json({ error: 'url and formatId are required' });
+    }
+
+    console.log(`\n[YouTube DL] Downloading format ${formatId} from ${url}`);
+
+    const ytdlp = getYtDlpBinary();
+    const dlFilename = filename || `omnisave_youtube_${formatId}.mp4`;
+    const ext = dlFilename.split('.').pop() || 'mp4';
+    const mimeTypes = {
+        'mp4': 'video/mp4',
+        'webm': 'video/webm',
+        'mkv': 'video/x-matroska',
+        'm4a': 'audio/mp4',
+        'opus': 'audio/ogg',
+        'ogg': 'audio/ogg',
+        'mp3': 'audio/mpeg',
+    };
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+    // Merged formats (contain '+') need ffmpeg to mux — pipe to stdout via temp file
+    const needsMerge = formatId.includes('+');
+
+    if (needsMerge) {
+        const fs = require('fs');
+        const os = require('os');
+        const tempBase = path.join(os.tmpdir(), `omnisave-yt-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        const tempTemplate = `${tempBase}.%(ext)s`;
+
+        // Let yt-dlp pick the container based on input streams.
+        // Forcing --merge-output-format mp4 fails (or silently drops audio) when streams aren't mp4-compatible.
+        const args = [
+            '-f', formatId,
+            '--no-playlist',
+            '--no-warnings',
+            ...ffmpegArgs(),
+            '-o', tempTemplate,
+            url
+        ];
+
+        const child = spawn(ytdlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderrBuf = '';
+        let clientClosed = false;
+
+        child.stderr.on('data', (data) => {
+            const msg = data.toString();
+            stderrBuf += msg;
+            if (!msg.includes('[download]')) {
+                console.error(`[YouTube DL] stderr: ${msg.trim()}`);
+            }
+        });
+
+        child.on('error', (err) => {
+            console.error(`[YouTube DL] spawn error: ${err.message}`);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Download failed: ' + err.message });
+            }
+        });
+
+        child.on('close', (code) => {
+            if (clientClosed) {
+                cleanupTempFiles(tempBase);
+                return;
+            }
+            if (code !== 0) {
+                console.error(`[YouTube DL] yt-dlp exited with code ${code}`);
+                cleanupTempFiles(tempBase);
+                if (!res.headersSent) {
+                    const msg = stderrBuf.includes('ffmpeg')
+                        ? 'Merging failed — ffmpeg may not be installed on the server.'
+                        : 'Download failed';
+                    res.status(500).json({ error: msg });
+                }
+                return;
+            }
+
+            const downloadedPath = findTempFile(tempBase);
+            if (!downloadedPath) {
+                cleanupTempFiles(tempBase);
+                if (!res.headersSent) {
+                    res.status(500).json({
+                        error: 'Merge failed — no output file produced. Ensure ffmpeg is installed and on PATH.'
+                    });
+                }
+                return;
+            }
+
+            try {
+                const stat = fs.statSync(downloadedPath);
+                // The merge container may differ from what the client requested (e.g., webm vs mp4).
+                // Use the actual extension so the browser saves a valid file.
+                const actualExt = path.extname(downloadedPath).slice(1).toLowerCase();
+                const finalContentType = mimeTypes[actualExt] || contentType;
+                const finalFilename = (actualExt && !dlFilename.toLowerCase().endsWith('.' + actualExt))
+                    ? dlFilename.replace(/\.[^.]+$/, '') + '.' + actualExt
+                    : dlFilename;
+
+                res.setHeader('Content-Type', finalContentType);
+                res.setHeader('Content-Disposition', `attachment; filename="${finalFilename}"`);
+                res.setHeader('Content-Length', stat.size);
+
+                const stream = fs.createReadStream(downloadedPath);
+                stream.pipe(res);
+                const finalize = () => cleanupTempFiles(tempBase);
+                stream.on('close', finalize);
+                stream.on('error', finalize);
+            } catch (e) {
+                console.error(`[YouTube DL] stream error: ${e.message}`);
+                cleanupTempFiles(tempBase);
+                if (!res.headersSent) res.status(500).json({ error: 'Failed to stream file' });
+            }
+        });
+
+        req.on('close', () => {
+            clientClosed = true;
+            if (!child.killed) child.kill('SIGTERM');
+        });
+
+        return;
+    }
+
+    // Single-stream (progressive or audio-only) — pipe yt-dlp stdout directly
+    const args = [
+        '-f', formatId,
+        '--no-playlist',
+        '--no-warnings',
+        '-o', '-',
+        url
+    ];
+
+    if (audioOnly === 'true' && dlFilename.endsWith('.mp3')) {
+        // MP3 conversion needs ffmpeg too
+        args.push('-x', '--audio-format', 'mp3', ...ffmpegArgs());
+    }
+
+    const child = spawn(ytdlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${dlFilename}"`);
+
+    child.stdout.pipe(res);
+
+    child.stderr.on('data', (data) => {
+        const msg = data.toString();
+        if (!msg.includes('[download]')) {
+            console.error(`[YouTube DL] stderr: ${msg.trim()}`);
+        }
+    });
+
+    child.on('error', (err) => {
+        console.error(`[YouTube DL] spawn error: ${err.message}`);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Download failed: ' + err.message });
+        }
+    });
+
+    child.on('close', (code) => {
+        if (code !== 0 && !res.headersSent) {
+            console.error(`[YouTube DL] yt-dlp exited with code ${code}`);
+            res.status(500).json({ error: 'Download failed' });
+        }
+    });
+
+    req.on('close', () => {
+        if (!child.killed) child.kill('SIGTERM');
+    });
+});
+
+// ─── Progress-aware YouTube download (SSE prepare + token file serve) ───
+const crypto = require('crypto');
+const pendingDownloads = new Map(); // token -> { path, tempBase, filename, contentType, size, createdAt }
+
+// Garbage-collect stale prepared downloads every minute
+setInterval(() => {
+    const now = Date.now();
+    for (const [token, info] of pendingDownloads.entries()) {
+        if (now - info.createdAt > 10 * 60 * 1000) {
+            cleanupTempFiles(info.tempBase);
+            pendingDownloads.delete(token);
+            console.log(`[YouTube] Cleaned expired download: ${token}`);
+        }
+    }
+}, 60 * 1000).unref();
+
+// GET /api/youtube/prepare — Run yt-dlp, stream progress via SSE, hand back a token when ready
+app.get('/api/youtube/prepare', (req, res) => {
+    const { url, formatId, filename, audioOnly } = req.query;
+    if (!url || !formatId) {
+        res.status(400).json({ error: 'url and formatId are required' });
+        return;
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    const sendEvent = (event, data) => {
+        if (res.writableEnded) return;
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const fs = require('fs');
+    const os = require('os');
+    const ytdlp = getYtDlpBinary();
+    const dlFilename = filename || `omnisave_youtube.mp4`;
+    const tempBase = path.join(os.tmpdir(), `omnisave-yt-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const tempTemplate = `${tempBase}.%(ext)s`;
+
+    const args = [
+        '-f', formatId,
+        '--no-playlist',
+        '--no-warnings',
+        '--newline',
+        ...ffmpegArgs(),
+        '-o', tempTemplate,
+        url
+    ];
+    if (audioOnly === 'true' && dlFilename.endsWith('.mp3')) {
+        args.push('-x', '--audio-format', 'mp3');
+    }
+
+    console.log(`[YouTube Prepare] format=${formatId}`);
+    const child = spawn(ytdlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderrBuf = '';
+    let clientClosed = false;
+    let lastPercent = -1;
+    let phase = 'starting';
+
+    const handleProgressText = (text) => {
+        // [download]  23.4% of 124.50MiB at 1.23MiB/s ETA 01:23
+        const re = /\[download\]\s+(\d+(?:\.\d+)?)%(?:\s+of\s+~?\s*(\S+))?(?:\s+at\s+(\S+))?(?:\s+ETA\s+(\S+))?/g;
+        let m;
+        while ((m = re.exec(text)) !== null) {
+            const percent = parseFloat(m[1]);
+            // Throttle to ~1% steps so we don't spam the client
+            if (Math.abs(percent - lastPercent) >= 0.5 || percent === 100) {
+                lastPercent = percent;
+                phase = 'downloading';
+                sendEvent('progress', {
+                    phase,
+                    percent,
+                    totalSize: m[2] || '',
+                    speed: m[3] || '',
+                    eta: m[4] || '',
+                });
+            }
+        }
+        if ((text.includes('[Merger]') || text.includes('[ffmpeg]') || text.includes('[ExtractAudio]')) && phase !== 'merging') {
+            phase = 'merging';
+            sendEvent('progress', { phase: 'merging' });
+        }
+    };
+
+    child.stdout.on('data', d => handleProgressText(d.toString()));
+    child.stderr.on('data', (d) => {
+        const text = d.toString();
+        stderrBuf += text;
+        handleProgressText(text);
+        if (!text.includes('[download]') && !/^\s*\d+(\.\d+)?%/.test(text)) {
+            console.error(`[YouTube Prepare] stderr: ${text.trim()}`);
+        }
+    });
+
+    child.on('error', (err) => {
+        sendEvent('fail', { error: 'Spawn failed: ' + err.message });
+        res.end();
+    });
+
+    child.on('close', (code) => {
+        if (clientClosed) {
+            cleanupTempFiles(tempBase);
+            return;
+        }
+        if (code !== 0) {
+            cleanupTempFiles(tempBase);
+            const errorMsg = stderrBuf.includes('ffmpeg') && !FFMPEG_PATH
+                ? 'Merge failed — ffmpeg is not available.'
+                : stderrBuf.includes('Unavailable') || stderrBuf.includes('Private video')
+                    ? 'This video is unavailable or private.'
+                    : `Download failed (exit ${code})`;
+            sendEvent('fail', { error: errorMsg });
+            res.end();
+            return;
+        }
+
+        const downloadedPath = findTempFile(tempBase);
+        if (!downloadedPath) {
+            cleanupTempFiles(tempBase);
+            sendEvent('fail', { error: 'Output file not found after download.' });
+            res.end();
+            return;
+        }
+
+        const stat = fs.statSync(downloadedPath);
+        const actualExt = path.extname(downloadedPath).slice(1).toLowerCase();
+        const mimeTypes = {
+            mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska',
+            m4a: 'audio/mp4', opus: 'audio/ogg', ogg: 'audio/ogg', mp3: 'audio/mpeg',
+        };
+        const contentType = mimeTypes[actualExt] || 'application/octet-stream';
+        const finalFilename = (actualExt && !dlFilename.toLowerCase().endsWith('.' + actualExt))
+            ? dlFilename.replace(/\.[^.]+$/, '') + '.' + actualExt
+            : dlFilename;
+
+        const token = crypto.randomBytes(16).toString('hex');
+        pendingDownloads.set(token, {
+            path: downloadedPath,
+            tempBase,
+            filename: finalFilename,
+            contentType,
+            size: stat.size,
+            createdAt: Date.now(),
+        });
+
+        console.log(`[YouTube Prepare] Ready: ${token} (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+        sendEvent('ready', { token, filename: finalFilename, size: stat.size });
+        res.end();
+    });
+
+    req.on('close', () => {
+        clientClosed = true;
+        if (!child.killed) child.kill('SIGTERM');
+    });
+});
+
+// GET /api/youtube/file/:token — Serve the prepared file as a native download
+app.get('/api/youtube/file/:token', (req, res) => {
+    const fs = require('fs');
+    const info = pendingDownloads.get(req.params.token);
+    if (!info) {
+        return res.status(404).json({ error: 'Download not found or expired. Please request the download again.' });
+    }
+
+    res.setHeader('Content-Type', info.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${info.filename}"`);
+    res.setHeader('Content-Length', info.size);
+
+    const stream = fs.createReadStream(info.path);
+    stream.pipe(res);
+    const finalize = () => {
+        cleanupTempFiles(info.tempBase);
+        pendingDownloads.delete(req.params.token);
+    };
+    stream.on('close', finalize);
+    stream.on('error', finalize);
+});
+
+function findTempFile(basePath) {
+    const fs = require('fs');
+    const path = require('path');
+    const dir = path.dirname(basePath);
+    const prefix = path.basename(basePath);
+    try {
+        const files = fs.readdirSync(dir);
+        // Only consider the merged/final file — skip yt-dlp intermediates like "<prefix>.f137.mp4".
+        // If we don't filter these out, readdir's alphabetical order picks the intermediate
+        // (".f137.mp4" sorts before ".mp4"), which is the video-only or audio-only stream.
+        const candidates = files
+            .filter(f => f.startsWith(prefix + '.'))
+            .filter(f => {
+                const rest = f.substring(prefix.length + 1);
+                if (/^f\d+\./.test(rest)) return false; // intermediate stream file
+                if (rest.endsWith('.part')) return false; // partial download
+                return true;
+            })
+            .map(f => path.join(dir, f));
+        if (candidates.length === 0) return null;
+        // Multiple candidates would be unusual — pick the largest (most likely the merged output).
+        let best = candidates[0];
+        let bestSize = -1;
+        for (const p of candidates) {
+            try {
+                const s = fs.statSync(p).size;
+                if (s > bestSize) { bestSize = s; best = p; }
+            } catch {}
+        }
+        return best;
+    } catch {
+        return null;
+    }
+}
+
+function cleanupTempFiles(basePath) {
+    const fs = require('fs');
+    const path = require('path');
+    const dir = path.dirname(basePath);
+    const prefix = path.basename(basePath);
+    try {
+        const files = fs.readdirSync(dir);
+        for (const f of files) {
+            if (f.startsWith(prefix)) {
+                fs.unlink(path.join(dir, f), () => {});
+            }
+        }
+    } catch {}
+}
+
 // SPA fallback
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`\n  🎬  InstaSave is running on port ${PORT}\n`);
+    console.log(`\n  🎬  OmniSave is running on port ${PORT}\n`);
 });

@@ -50,7 +50,10 @@ npm start
 ```
 *Or for development mode:*
 ```bash
-npm run dev
+npm install
+
+node server.js
+
 ```
 
 The application will start running at `http://localhost:3000`. Open this URL in your web browser.

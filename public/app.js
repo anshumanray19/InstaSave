@@ -82,6 +82,22 @@ document.addEventListener('DOMContentLoaded', () => {
             urlInput.parentElement.style.borderColor = '';
         }, 1000);
     });
+
+    // Close info modal on overlay click
+    const infoModal = document.getElementById('infoModal');
+    infoModal.addEventListener('click', (e) => {
+        if (e.target === infoModal) closeInfoModal();
+    });
+
+    // Enter key for notify email
+    document.getElementById('notifyEmailInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') registerNotification();
+    });
+
+    // Enter key for YouTube tab
+    document.getElementById('ytUrlInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') fetchYouTubeInfo();
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -1069,6 +1085,319 @@ function hideStoryResults() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  TAB 6: YOUTUBE DOWNLOADER
+// ═══════════════════════════════════════════════════════════════
+
+let currentYtData = null;
+let currentYtUrl = '';
+
+async function fetchYouTubeInfo() {
+    const input = document.getElementById('ytUrlInput');
+    const url = input.value.trim();
+    if (!url) {
+        input.focus();
+        return;
+    }
+
+    if (!url.match(/(?:youtube\.com|youtu\.be)/i)) {
+        showYtError('Please enter a valid YouTube URL.');
+        return;
+    }
+
+    currentYtUrl = url;
+    showYtLoading();
+    hideYtError();
+    hideYtResults();
+
+    try {
+        const res = await fetch(`${API_BASE}/api/youtube/info`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+            hideYtLoading();
+            showYtError(data.error || 'Could not fetch video info.');
+            return;
+        }
+
+        currentYtData = data;
+        renderYouTubeResults(data);
+        hideYtLoading();
+
+    } catch (err) {
+        hideYtLoading();
+        console.error('YouTube fetch error:', err);
+        showYtError('Connection error. Make sure the server is running.');
+    }
+}
+
+function renderYouTubeResults(data) {
+    // Set video info
+    document.getElementById('ytThumbnail').src = data.thumbnail;
+    document.getElementById('ytTitle').textContent = data.title;
+    document.getElementById('ytChannel').textContent = data.channel;
+    document.getElementById('ytDuration').textContent = formatDuration(data.duration);
+    document.getElementById('ytViews').textContent = formatViewCount(data.viewCount) + ' views';
+
+    // Render video+audio formats
+    const vaList = document.getElementById('ytFormats-videoaudio');
+    vaList.innerHTML = '';
+    if (data.videoAudioFormats.length === 0) {
+        vaList.innerHTML = '<div class="yt-empty-msg">No video formats available</div>';
+    } else {
+        data.videoAudioFormats.forEach(f => {
+            vaList.appendChild(createFormatRow(f, 'video'));
+        });
+    }
+
+    // Render audio formats
+    const aList = document.getElementById('ytFormats-audio');
+    aList.innerHTML = '';
+    if (data.audioOnlyFormats.length === 0) {
+        aList.innerHTML = '<div class="yt-empty-msg">No audio-only formats available</div>';
+    } else {
+        data.audioOnlyFormats.forEach(f => {
+            aList.appendChild(createFormatRow(f, 'audio'));
+        });
+    }
+
+    // Default to first tab
+    switchYtFormatTab('videoaudio');
+    showYtResults();
+}
+
+function createFormatRow(f, category) {
+    const row = document.createElement('div');
+    row.className = 'yt-format-row';
+
+    const isHD = f.height >= 720 || f.abr >= 192;
+    const qualityLabel = f.quality || '—';
+    const filesizeStr = f.filesize ? formatFilesize(f.filesize) : '—';
+    const codecStr = category === 'audio'
+        ? (f.acodec || '')
+        : (f.vcodec ? f.vcodec : '') + (f.acodec ? ' + ' + f.acodec : '');
+    const fpsStr = f.fps && f.fps > 30 ? ` ${f.fps}fps` : '';
+    const noteStr = f.note || '';
+
+    row.innerHTML = `
+        <span class="yt-quality-badge${isHD ? ' hd' : ''}">${qualityLabel}${fpsStr}</span>
+        <div class="yt-format-details">
+            <span class="yt-format-ext">${f.ext}</span>
+            <span class="yt-format-codec">${codecStr}</span>
+            ${noteStr ? `<span class="yt-format-note">${noteStr}</span>` : ''}
+        </div>
+        <span class="yt-format-size">${filesizeStr}</span>
+        <button class="yt-download-btn" onclick="downloadYtFormat('${f.formatId}', '${f.ext}', ${category === 'audio'})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download
+        </button>
+    `;
+    return row;
+}
+
+let ytActiveDownload = null; // { source, token }
+
+function downloadYtFormat(formatId, ext, isAudio) {
+    if (!currentYtUrl || !currentYtData) return;
+    if (ytActiveDownload) {
+        showToast('⚠️', 'Another download is already in progress.');
+        return;
+    }
+
+    const safeTitle = currentYtData.title
+        .replace(/[^a-zA-Z0-9\s\-_.]/g, '')
+        .replace(/\s+/g, '_')
+        .substring(0, 80);
+    const safeFormatId = formatId.split('+')[0].replace(/[^a-zA-Z0-9]/g, '');
+    const filename = `${safeTitle}_${safeFormatId}.${ext}`;
+
+    const params = new URLSearchParams({
+        url: currentYtUrl,
+        formatId,
+        filename,
+        audioOnly: isAudio ? 'true' : 'false',
+    });
+    const prepareUrl = `${API_BASE}/api/youtube/prepare?${params.toString()}`;
+
+    showYtProgress(filename, ext);
+
+    const source = new EventSource(prepareUrl);
+    ytActiveDownload = { source };
+
+    source.addEventListener('progress', (e) => {
+        try { updateYtProgress(JSON.parse(e.data)); } catch {}
+    });
+
+    source.addEventListener('ready', (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            ytProgressReady(data);
+            // Trigger native browser download — uses streaming, no memory bloat
+            const a = document.createElement('a');
+            a.href = `${API_BASE}/api/youtube/file/${data.token}`;
+            a.download = data.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => hideYtProgress(), 1800);
+        } catch (err) {
+            hideYtProgress();
+            showToast('❌', 'Could not start file save.');
+        } finally {
+            source.close();
+            ytActiveDownload = null;
+        }
+    });
+
+    source.addEventListener('fail', (e) => {
+        source.close();
+        ytActiveDownload = null;
+        hideYtProgress();
+        let msg = 'Download failed.';
+        try { msg = JSON.parse(e.data).error || msg; } catch {}
+        showToast('❌', msg);
+    });
+
+    source.onerror = () => {
+        // EventSource auto-retries; if we got here without a 'ready' or 'fail', the server dropped us
+        if (source.readyState === EventSource.CLOSED && ytActiveDownload) {
+            source.close();
+            ytActiveDownload = null;
+            hideYtProgress();
+            showToast('❌', 'Connection lost during download.');
+        }
+    };
+}
+
+function cancelYtDownload() {
+    if (!ytActiveDownload) return;
+    ytActiveDownload.source.close();
+    ytActiveDownload = null;
+    hideYtProgress();
+    showToast('🛑', 'Download cancelled');
+}
+
+function showYtProgress(filename, ext) {
+    const modal = document.getElementById('ytProgressModal');
+    if (!modal) return;
+    modal.querySelector('.yt-progress-filename').textContent = filename;
+    modal.querySelector('.yt-progress-bar').style.width = '0%';
+    modal.querySelector('.yt-progress-percent').textContent = '0%';
+    modal.querySelector('.yt-progress-info').textContent = '';
+    modal.querySelector('.yt-progress-phase').textContent = 'Connecting…';
+    modal.classList.remove('done', 'indeterminate');
+    modal.classList.add('visible', 'indeterminate');
+}
+
+function updateYtProgress(data) {
+    const modal = document.getElementById('ytProgressModal');
+    if (!modal) return;
+
+    if (data.phase === 'downloading') {
+        modal.classList.remove('indeterminate');
+        const pct = Math.max(0, Math.min(100, data.percent || 0));
+        modal.querySelector('.yt-progress-bar').style.width = `${pct}%`;
+        modal.querySelector('.yt-progress-percent').textContent = `${pct.toFixed(1)}%`;
+        const parts = [];
+        if (data.totalSize) parts.push(`of ${data.totalSize}`);
+        if (data.speed) parts.push(`${data.speed}`);
+        if (data.eta) parts.push(`ETA ${data.eta}`);
+        modal.querySelector('.yt-progress-info').textContent = parts.join(' • ');
+        modal.querySelector('.yt-progress-phase').textContent = 'Downloading';
+    } else if (data.phase === 'merging') {
+        modal.classList.add('indeterminate');
+        modal.querySelector('.yt-progress-phase').textContent = 'Merging video + audio…';
+        modal.querySelector('.yt-progress-info').textContent = 'Almost done';
+    }
+}
+
+function ytProgressReady(data) {
+    const modal = document.getElementById('ytProgressModal');
+    if (!modal) return;
+    modal.classList.remove('indeterminate');
+    modal.classList.add('done');
+    modal.querySelector('.yt-progress-bar').style.width = '100%';
+    modal.querySelector('.yt-progress-percent').textContent = '100%';
+    modal.querySelector('.yt-progress-info').textContent = data.size ? formatFilesize(data.size) : '';
+    modal.querySelector('.yt-progress-phase').textContent = '✓ Ready — opening save dialog…';
+}
+
+function hideYtProgress() {
+    const modal = document.getElementById('ytProgressModal');
+    if (modal) modal.classList.remove('visible');
+}
+
+function switchYtFormatTab(cat) {
+    document.querySelectorAll('.yt-format-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.ytcat === cat);
+    });
+    document.querySelectorAll('.yt-format-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+    const target = document.getElementById(`ytPanel-${cat}`);
+    if (target) target.classList.add('active');
+}
+
+// YouTube UI helpers
+function showYtLoading() {
+    document.getElementById('ytLoadingSection').classList.add('visible');
+}
+function hideYtLoading() {
+    document.getElementById('ytLoadingSection').classList.remove('visible');
+}
+function showYtError(msg) {
+    document.getElementById('ytErrorText').textContent = msg;
+    document.getElementById('ytErrorSection').classList.add('visible');
+}
+function hideYtError() {
+    document.getElementById('ytErrorSection').classList.remove('visible');
+}
+function clearYtError() {
+    hideYtError();
+    document.getElementById('ytUrlInput').focus();
+}
+function showYtResults() {
+    document.getElementById('ytResultsSection').classList.add('visible');
+}
+function hideYtResults() {
+    document.getElementById('ytResultsSection').classList.remove('visible');
+}
+
+// Format helpers
+function formatDuration(seconds) {
+    if (!seconds) return '0:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function formatViewCount(num) {
+    if (!num) return '0';
+    if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toLocaleString();
+}
+
+function formatFilesize(bytes) {
+    if (!bytes) return '—';
+    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return bytes + ' B';
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  SHARED UTILITIES
 // ═══════════════════════════════════════════════════════════════
 
@@ -1099,4 +1428,241 @@ function formatCount(num) {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
     return num.toString();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB 0: HOMEPAGE NAVIGATION & INFORMATION MODAL
+// ═══════════════════════════════════════════════════════════════
+
+// Info Modal State & Platforms
+let currentInfoPlatform = null;
+const PLATFORM_DETAILS = {
+    youtube: {
+        title: 'YouTube Downloader',
+        icon: '📺',
+        class: 'info-modal-youtube',
+        features: [
+            'Download videos up to 4K Ultra HD quality',
+            'Extract high-quality audio in MP3/M4A format',
+            'Save full playlists or channels with one click',
+            'Support for YouTube Shorts and YouTube Music'
+        ]
+    },
+    snapchat: {
+        title: 'Snapchat Downloader',
+        icon: '👻',
+        class: 'info-modal-snapchat',
+        features: [
+            'Save public Snapchat Spotlight videos in HD',
+            'Download user stories before they expire (24h)',
+            'Extract high-quality snap media without watermarks',
+            'Extremely fast, secure, and direct video downloads'
+        ]
+    },
+    twitter: {
+        title: 'Twitter / X Downloader',
+        icon: '𝕏',
+        class: 'info-modal-twitter',
+        features: [
+            'Download high-definition videos from any tweet',
+            'Convert and download Twitter GIFs as MP4',
+            'Save thread image galleries in full quality',
+            'One-click copy and instant download links'
+        ]
+    },
+    reddit: {
+        title: 'Reddit Downloader',
+        icon: '👽',
+        class: 'info-modal-reddit',
+        features: [
+            'Save Reddit videos combined with high-quality audio',
+            'Download entire image gallery subreddit posts',
+            'Save Reddit GIFs, links, and text details',
+            'Supports old.reddit.com and new Reddit URLs'
+        ]
+    },
+    threads: {
+        title: 'Threads Downloader',
+        icon: '🧵',
+        class: 'info-modal-threads',
+        features: [
+            'Download Threads videos and reels in high resolution',
+            'Save carousel posts (multiple images) in high quality',
+            'Extract and download audio/voice notes from posts',
+            'Clean, direct links without Meta API limitations'
+        ]
+    }
+};
+
+// ─── Homepage Navigation ───────────────────────────────────────
+function showHomepage() {
+    // Hide sub nav
+    document.getElementById('tabNav').style.display = 'none';
+    
+    // Hide header right actions
+    document.getElementById('sessionBadge').style.display = 'none';
+    document.getElementById('btnSession').style.display = 'none';
+    
+    // Switch to tab-home
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    const target = document.getElementById('tab-home');
+    if (target) {
+        target.classList.add('active');
+        target.style.animation = 'none';
+        target.offsetHeight; // force reflow
+        target.style.animation = '';
+    }
+}
+
+function openDownloader(platform) {
+    if (platform === 'instagram') {
+        // Show sub nav
+        document.getElementById('tabNav').style.display = '';
+        
+        // Show header right actions
+        document.getElementById('sessionBadge').style.display = '';
+        document.getElementById('btnSession').style.display = '';
+        
+        // Switch to the Instagram Media tab by default
+        switchTab('media');
+    } else if (platform === 'youtube') {
+        // Navigate directly to YouTube tab
+        // Hide Instagram sub nav, keep header clean
+        document.getElementById('tabNav').style.display = 'none';
+        document.getElementById('sessionBadge').style.display = 'none';
+        document.getElementById('btnSession').style.display = 'none';
+        
+        // Switch to YouTube tab
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        const ytTab = document.getElementById('tab-youtube');
+        if (ytTab) {
+            ytTab.classList.add('active');
+            ytTab.style.animation = 'none';
+            ytTab.offsetHeight;
+            ytTab.style.animation = '';
+        }
+    } else {
+        openInfoModal(platform);
+    }
+}
+
+// ─── Coming Soon Information Modal ─────────────────────────────
+function openInfoModal(platform) {
+    const details = PLATFORM_DETAILS[platform];
+    if (!details) return;
+    
+    currentInfoPlatform = platform;
+    
+    // Set icon
+    const iconEl = document.getElementById('infoModalIcon');
+    iconEl.textContent = details.icon;
+    iconEl.className = 'info-modal-icon';
+    iconEl.classList.add(details.class);
+    
+    // Set title
+    document.getElementById('infoModalTitle').textContent = details.title;
+    
+    // Set features
+    const featuresEl = document.getElementById('infoModalFeatures');
+    featuresEl.innerHTML = details.features.map(f => `
+        <div class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>${f}</span>
+        </div>
+    `).join('');
+    
+    // Load upvote count
+    const votes = getUpvoteCount(platform);
+    document.getElementById('upvoteCount').textContent = votes;
+    
+    // Check if user has already upvoted
+    const upvoteBtn = document.getElementById('btnUpvote');
+    const hasVoted = checkHasUpvoted(platform);
+    if (hasVoted) {
+        upvoteBtn.classList.add('voted');
+        upvoteBtn.innerHTML = `✓ Upvoted! (${votes})`;
+    } else {
+        upvoteBtn.classList.remove('voted');
+        upvoteBtn.innerHTML = `👍 Upvote Downloader (<span id="upvoteCount">${votes}</span>)`;
+    }
+    
+    // Clear notification input
+    document.getElementById('notifyEmailInput').value = '';
+    
+    // Show modal
+    const infoModal = document.getElementById('infoModal');
+    infoModal.classList.add('visible');
+}
+
+function closeInfoModal() {
+    const infoModal = document.getElementById('infoModal');
+    infoModal.classList.remove('visible');
+    currentInfoPlatform = null;
+}
+
+function getUpvoteCount(platform) {
+    const votesStr = localStorage.getItem(`votes_${platform}`);
+    if (votesStr !== null) return parseInt(votesStr, 10);
+    
+    // Initial votes so page doesn't look empty
+    const mockVotes = {
+        youtube: 342,
+        snapchat: 184,
+        twitter: 279,
+        reddit: 125,
+        threads: 96
+    };
+    const initialVotes = mockVotes[platform] || 0;
+    localStorage.setItem(`votes_${platform}`, initialVotes);
+    return initialVotes;
+}
+
+function checkHasUpvoted(platform) {
+    return localStorage.getItem(`has_voted_${platform}`) === 'true';
+}
+
+function upvotePlatform() {
+    if (!currentInfoPlatform) return;
+    
+    const platform = currentInfoPlatform;
+    if (checkHasUpvoted(platform)) {
+        showToast('ℹ️', 'You have already upvoted this downloader!');
+        return;
+    }
+    
+    const currentVotes = getUpvoteCount(platform) + 1;
+    localStorage.setItem(`votes_${platform}`, currentVotes);
+    localStorage.setItem(`has_voted_${platform}`, 'true');
+    
+    // Update button UI
+    const upvoteBtn = document.getElementById('btnUpvote');
+    upvoteBtn.classList.add('voted');
+    upvoteBtn.innerHTML = `✓ Upvoted! (${currentVotes})`;
+    
+    showToast('👍', 'Thanks for voting! We are prioritising this feature.');
+}
+
+function registerNotification() {
+    if (!currentInfoPlatform) return;
+    const emailInput = document.getElementById('notifyEmailInput');
+    const email = emailInput.value.trim();
+    if (!email || !email.includes('@')) {
+        showToast('⚠️', 'Please enter a valid email address.');
+        emailInput.focus();
+        return;
+    }
+    
+    // Save email simulated registration
+    const signupsKey = `notif_signups_${currentInfoPlatform}`;
+    const currentSignups = JSON.parse(localStorage.getItem(signupsKey) || '[]');
+    if (!currentSignups.includes(email)) {
+        currentSignups.push(email);
+        localStorage.setItem(signupsKey, JSON.stringify(currentSignups));
+    }
+    
+    emailInput.value = '';
+    closeInfoModal();
+    showToast('✅', "You're registered! We'll notify you on launch.");
 }

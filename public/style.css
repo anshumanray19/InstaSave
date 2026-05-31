@@ -1834,6 +1834,164 @@ body {
     transform: translateX(-50%) translateY(0);
 }
 
+/* ─── YouTube Download Progress Modal ──────────────────────── */
+.yt-progress-modal {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 360px;
+    max-width: calc(100vw - 32px);
+    padding: 18px 18px 16px;
+    border-radius: 14px;
+    background: rgba(20, 20, 28, 0.96);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    color: var(--text-primary);
+    z-index: 350;
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.yt-progress-modal.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.yt-progress-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.yt-progress-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #ff0000, #cc0000);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.yt-progress-titles {
+    flex: 1;
+    min-width: 0;
+}
+
+.yt-progress-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.yt-progress-filename {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.yt-progress-cancel {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+}
+
+.yt-progress-cancel:hover {
+    background: rgba(255, 0, 0, 0.18);
+    color: #ff6b6b;
+}
+
+.yt-progress-bar-wrap {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.yt-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #ff0000, #ff6b6b);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.yt-progress-modal.indeterminate .yt-progress-bar {
+    width: 40% !important;
+    animation: ytProgressShimmer 1.4s ease-in-out infinite;
+}
+
+.yt-progress-modal.done .yt-progress-bar {
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+@keyframes ytProgressShimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+}
+
+.yt-progress-stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 8px;
+    gap: 12px;
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+}
+
+.yt-progress-percent {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.yt-progress-info {
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.yt-progress-phase {
+    margin-top: 4px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+    .yt-progress-modal {
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        width: auto;
+    }
+}
+
 /* ─── Animations ────────────────────────────────────────────── */
 @keyframes fadeIn {
     from {
@@ -1960,3 +2118,640 @@ body {
         text-align: center;
     }
 }
+
+/* ─── Downloader Homepage ───────────────────────────────────── */
+.downloader-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 20px;
+    margin-top: 40px;
+    animation: fadeInUp 0.8s ease-out 0.2s both;
+}
+
+.downloader-card {
+    position: relative;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    cursor: pointer;
+    transition: transform var(--transition-spring), box-shadow var(--transition-smooth), border-color var(--transition-smooth);
+    overflow: hidden;
+}
+
+.downloader-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.03), transparent 70%);
+    z-index: 0;
+}
+
+/* Card Hover States & Glows */
+.downloader-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Brand-specific borders and shadow glows on hover */
+.downloader-card.brand-instagram:hover {
+    border-color: rgba(225, 48, 108, 0.4);
+    box-shadow: 0 12px 40px rgba(225, 48, 108, 0.15), var(--glass-shadow);
+}
+.downloader-card.brand-youtube:hover {
+    border-color: rgba(255, 0, 0, 0.4);
+    box-shadow: 0 12px 40px rgba(255, 0, 0, 0.15), var(--glass-shadow);
+}
+.downloader-card.brand-snapchat:hover {
+    border-color: rgba(255, 252, 0, 0.4);
+    box-shadow: 0 12px 40px rgba(255, 252, 0, 0.1), var(--glass-shadow);
+}
+.downloader-card.brand-twitter:hover {
+    border-color: rgba(29, 161, 242, 0.4);
+    box-shadow: 0 12px 40px rgba(29, 161, 242, 0.15), var(--glass-shadow);
+}
+.downloader-card.brand-reddit:hover {
+    border-color: rgba(255, 69, 0, 0.4);
+    box-shadow: 0 12px 40px rgba(255, 69, 0, 0.15), var(--glass-shadow);
+}
+.downloader-card.brand-threads:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 12px 40px rgba(255, 255, 255, 0.1), var(--glass-shadow);
+}
+
+/* Card content styling */
+.downloader-card-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+    transition: var(--transition-fast);
+    z-index: 1;
+}
+
+.downloader-card:hover .downloader-card-icon {
+    background: rgba(255, 255, 255, 0.08);
+    transform: scale(1.1);
+}
+
+/* Icon Brand Colors */
+.brand-instagram .downloader-card-icon {
+    color: #e1306c;
+    background: rgba(225, 48, 108, 0.08);
+    border-color: rgba(225, 48, 108, 0.2);
+}
+.brand-youtube .downloader-card-icon {
+    color: #ff0000;
+    background: rgba(255, 0, 0, 0.08);
+    border-color: rgba(255, 0, 0, 0.2);
+}
+.brand-snapchat .downloader-card-icon {
+    color: #fffc00;
+    background: rgba(255, 252, 0, 0.05);
+    border-color: rgba(255, 252, 0, 0.15);
+    filter: drop-shadow(0 0 4px rgba(255, 252, 0, 0.3));
+}
+.brand-twitter .downloader-card-icon {
+    color: #1da1f2;
+    background: rgba(29, 161, 242, 0.08);
+    border-color: rgba(29, 161, 242, 0.2);
+}
+.brand-reddit .downloader-card-icon {
+    color: #ff4500;
+    background: rgba(255, 69, 0, 0.08);
+    border-color: rgba(255, 69, 0, 0.2);
+}
+.brand-threads .downloader-card-icon {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.downloader-card-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    z-index: 1;
+}
+
+.downloader-card-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.status-badge.active {
+    background: rgba(72, 199, 142, 0.08);
+    border: 1px solid rgba(72, 199, 142, 0.2);
+    color: #48c78e;
+}
+
+.status-badge.active .status-dot {
+    background: #48c78e;
+    box-shadow: 0 0 6px rgba(72, 199, 142, 0.8);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.status-badge.coming-soon {
+    background: rgba(29, 161, 242, 0.08);
+    border: 1px solid rgba(29, 161, 242, 0.2);
+    color: #1da1f2;
+}
+
+.status-badge.coming-soon .status-dot {
+    background: #1da1f2;
+    box-shadow: 0 0 6px rgba(29, 161, 242, 0.8);
+}
+
+.downloader-card-desc {
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 8px;
+    flex-grow: 1;
+    z-index: 1;
+}
+
+.downloader-card-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: var(--transition-fast);
+    z-index: 1;
+}
+
+.downloader-card:hover .downloader-card-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.downloader-card.brand-instagram:hover .downloader-card-btn {
+    background: var(--gradient-ig);
+    border-color: transparent;
+    color: white;
+    box-shadow: 0 4px 15px rgba(225, 48, 108, 0.3);
+}
+
+.downloader-card.brand-youtube:hover .downloader-card-btn {
+    background: linear-gradient(135deg, #ff0000, #cc0000);
+    border-color: transparent;
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 0, 0, 0.3);
+}
+
+/* Home back button in sub nav */
+.tab-btn.home-nav-btn {
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.03);
+    margin-right: 8px;
+}
+.tab-btn.home-nav-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Premium Info Modal */
+.info-modal-icon-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+.info-modal-icon {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    font-size: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* Dynamic glow colors for info modal icon */
+.info-modal-youtube {
+    color: #ff0000;
+    background: rgba(255, 0, 0, 0.08);
+    border-color: rgba(255, 0, 0, 0.2);
+    box-shadow: 0 8px 24px rgba(255, 0, 0, 0.15);
+}
+.info-modal-snapchat {
+    color: #fffc00;
+    background: rgba(255, 252, 0, 0.05);
+    border-color: rgba(255, 252, 0, 0.15);
+    box-shadow: 0 8px 24px rgba(255, 252, 0, 0.1);
+    filter: drop-shadow(0 0 2px rgba(255, 252, 0, 0.2));
+}
+.info-modal-twitter {
+    color: #1da1f2;
+    background: rgba(29, 161, 242, 0.08);
+    border-color: rgba(29, 161, 242, 0.2);
+    box-shadow: 0 8px 24px rgba(29, 161, 242, 0.15);
+}
+.info-modal-reddit {
+    color: #ff4500;
+    background: rgba(255, 69, 0, 0.08);
+    border-color: rgba(255, 69, 0, 0.2);
+    box-shadow: 0 8px 24px rgba(255, 69, 0, 0.15);
+}
+.info-modal-threads {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 24px rgba(255, 255, 255, 0.15);
+}
+
+.features-list {
+    margin: 20px 0;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+.feature-check {
+    color: #48c78e;
+    font-weight: bold;
+}
+
+.upvote-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 20px 0;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.upvote-title {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+.btn-upvote {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+.btn-upvote:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+}
+.btn-upvote.voted {
+    background: rgba(72, 199, 142, 0.1);
+    border-color: rgba(72, 199, 142, 0.3);
+    color: #48c78e;
+    animation: upvotePulse 0.4s ease-out;
+}
+
+@keyframes upvotePulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.coming-soon-badge-modal {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: rgba(29, 161, 242, 0.08);
+    border: 1px solid rgba(29, 161, 242, 0.2);
+    color: #1da1f2;
+    margin-top: 8px;
+}
+
+/* ─── YouTube Downloader ───────────────────────────────────── */
+.yt-btn-fetch {
+    background: linear-gradient(135deg, #ff0000, #cc0000) !important;
+}
+.yt-btn-fetch:hover {
+    box-shadow: 0 4px 20px rgba(255, 0, 0, 0.4) !important;
+}
+
+.yt-results {
+    display: none;
+    overflow: hidden;
+    margin-bottom: 32px;
+    animation: fadeInUp 0.6s ease-out;
+}
+.yt-results.visible {
+    display: block;
+}
+
+/* Video Info Card */
+.yt-video-info {
+    display: flex;
+    gap: 16px;
+    padding: 20px;
+    border-bottom: 1px solid var(--glass-border);
+}
+.yt-thumb-wrap {
+    position: relative;
+    width: 200px;
+    min-width: 200px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.yt-thumbnail {
+    width: 100%;
+    aspect-ratio: 16/9;
+    object-fit: cover;
+    display: block;
+}
+.yt-duration-badge {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+.yt-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow: hidden;
+}
+.yt-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.yt-channel {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+.yt-stats {
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+}
+.yt-stat {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Format Category Tabs */
+.yt-format-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--glass-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.yt-format-tabs::-webkit-scrollbar { display: none; }
+
+.yt-format-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 100px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    white-space: nowrap;
+}
+.yt-format-tab:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+}
+.yt-format-tab.active {
+    background: rgba(255, 0, 0, 0.08);
+    border-color: rgba(255, 0, 0, 0.25);
+    color: #ff4444;
+}
+.yt-format-tab.active svg {
+    color: #ff4444;
+}
+
+/* Format Panels */
+.yt-format-panel {
+    display: none;
+}
+.yt-format-panel.active {
+    display: block;
+}
+
+/* Format List */
+.yt-format-list {
+    padding: 8px 0;
+}
+
+.yt-format-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    transition: var(--transition-fast);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.yt-format-row:last-child {
+    border-bottom: none;
+}
+.yt-format-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.yt-quality-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 56px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+/* HD+ badges get a red accent */
+.yt-quality-badge.hd {
+    background: rgba(255, 0, 0, 0.08);
+    border-color: rgba(255, 0, 0, 0.2);
+    color: #ff4444;
+}
+
+.yt-format-details {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.yt-format-ext {
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+.yt-format-codec {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+.yt-format-size {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+    min-width: 60px;
+    text-align: right;
+}
+.yt-format-note {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.yt-download-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #ff0000, #cc0000);
+    color: white;
+    font-family: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.yt-download-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(255, 0, 0, 0.3);
+}
+.yt-download-btn:active {
+    transform: translateY(0);
+}
+
+.yt-empty-msg {
+    text-align: center;
+    padding: 32px 20px;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
+
+/* YouTube Back to Home button */
+.yt-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 100px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+.yt-back-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+/* Responsive: YouTube */
+@media (max-width: 600px) {
+    .yt-video-info {
+        flex-direction: column;
+    }
+    .yt-thumb-wrap {
+        width: 100%;
+        min-width: unset;
+    }
+    .yt-format-row {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px 16px;
+    }
+    .yt-format-details {
+        flex-wrap: wrap;
+    }
+    .yt-format-size {
+        min-width: unset;
+    }
+}
