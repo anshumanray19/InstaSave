@@ -260,6 +260,7 @@ app.post('/api/fetch-video', async (req, res) => {
     console.log(`\n[Fetch] Shortcode: ${shortcode} → Media ID: ${mediaId}`);
 
     let videoUrl, thumbnailUrl, caption, username;
+    let embedDisabled = false;
 
     try {
         // ═══ Method 1: Mobile API (most reliable) ═══
@@ -360,6 +361,12 @@ app.post('/api/fetch-video', async (req, res) => {
                     const html = await embedRes.text();
                     if (!html || html.length < 500) continue;
 
+                    if (html.includes('EmbedIsBroken') || html.includes('The link to this photo or video may be broken')) {
+                        console.log(`[Fetch] Embed is broken/disabled for /${urlType}/`);
+                        embedDisabled = true;
+                        continue;
+                    }
+
                     // Unescape/decode quotes, slashes, and characters in the HTML first
                     const decodedHtml = html
                         .replace(/\\+/g, '\\')
@@ -398,6 +405,12 @@ app.post('/api/fetch-video', async (req, res) => {
         // ═══ Final response ═══
         if (!videoUrl) {
             console.log('[Fetch] ✗ All methods failed');
+            if (embedDisabled && !igSession.sessionid) {
+                return res.status(403).json({
+                    error: "This post has embedding disabled by the creator (or is restricted). Please log in with your Instagram Session ID in the 'Private & Exclusive' tab to download it.",
+                    needsLogin: true
+                });
+            }
             if (!igSession.sessionid) {
                 return res.status(401).json({
                     error: 'Could not fetch this post. If it is private or restricted, please log in with your Instagram session ID.',
@@ -441,6 +454,7 @@ app.post('/api/fetch-public', async (req, res) => {
     let items = [];
     let caption = '';
     let username = '';
+    let embedDisabled = false;
 
     try {
         // ═══ Method 1: Mobile API (most reliable) ═══
@@ -553,6 +567,12 @@ app.post('/api/fetch-public', async (req, res) => {
                     const html = await embedRes.text();
                     if (!html || html.length < 500) continue;
 
+                    if (html.includes('EmbedIsBroken') || html.includes('The link to this photo or video may be broken')) {
+                        console.log(`[PublicFetch] Embed is broken/disabled for /${urlType}/`);
+                        embedDisabled = true;
+                        continue;
+                    }
+
                     // Unescape/decode quotes, slashes, and characters in the HTML first
                     const decodedHtml = html
                         .replace(/\\+/g, '\\')
@@ -626,6 +646,12 @@ app.post('/api/fetch-public', async (req, res) => {
 
         if (items.length === 0) {
             console.log('[PublicFetch] ✗ All methods failed');
+            if (embedDisabled && !igSession.sessionid) {
+                return res.status(403).json({
+                    error: "This post has embedding disabled by the creator (or is restricted). Please use the 'Private & Exclusive' tab with your Instagram Session ID to download it.",
+                    needsLogin: true
+                });
+            }
             return res.status(404).json({
                 error: igSession.sessionid
                     ? 'Could not extract media. The post might be from a private account, or your session expired.'
