@@ -256,10 +256,6 @@ app.post('/api/fetch-video', async (req, res) => {
         return res.status(400).json({ error: 'Invalid Instagram URL. Please paste a reel, post, or IGTV link.' });
     }
 
-    if (!igSession.sessionid) {
-        return res.status(401).json({ error: 'Please login first by providing your Instagram sessionid.' });
-    }
-
     const mediaId = shortcodeToMediaId(shortcode);
     console.log(`\n[Fetch] Shortcode: ${shortcode} → Media ID: ${mediaId}`);
 
@@ -343,56 +339,71 @@ app.post('/api/fetch-video', async (req, res) => {
         }
 
         // ═══ Method 3: Web page scrape (last resort) ═══
+        // ═══ Method 3: Web page scrape (last resort, works without authentication) ═══
         if (!videoUrl) {
-            console.log('[Fetch] Trying page scrape...');
-            try {
-                const pageRes = await fetch(`https://www.instagram.com/reel/${shortcode}/`, {
-                    headers: {
-                        ...WEB_HEADERS(),
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    },
-                    redirect: 'manual',
-                });
-                console.log(`[Fetch] Page scrape status: ${pageRes.status}`);
+            console.log('[Fetch] Trying page scrape via embed...');
+            const embedHeaders = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'sec-fetch-mode': 'navigate',
+            };
 
-                if (pageRes.ok) {
-                    const html = await pageRes.text();
-                    console.log(`[Fetch] Page HTML length: ${html.length}`);
-
-                    // Try og:video meta tag
-                    const ogVideoMatch = html.match(/<meta\s+(?:property|name)="og:video"\s+content="([^"]+)"/);
-                    if (ogVideoMatch) {
-                        videoUrl = ogVideoMatch[1];
-                        const ogImgMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/);
-                        thumbnailUrl = ogImgMatch ? ogImgMatch[1] : null;
-                        caption = '';
-                        username = '';
-                        console.log(`[Fetch] ✓ Got video from og:video meta tag`);
+            for (const urlType of ['p', 'reel', 'tv']) {
+                try {
+                    const embedUrl = `https://www.instagram.com/${urlType}/${shortcode}/embed/captioned/`;
+                    const embedRes = await fetch(embedUrl, { headers: embedHeaders, redirect: 'manual' });
+                    if (!embedRes.ok) {
+                        console.log(`[Fetch] Embed /${urlType}/ status: ${embedRes.status}`);
+                        continue;
                     }
+                    const html = await embedRes.text();
+                    if (!html || html.length < 500) continue;
 
-                    // Try embedded JSON data
-                    if (!videoUrl) {
-                        // Look for video_url in raw JSON embedded in the page
-                        const videoUrlMatch = html.match(/"video_url"\s*:\s*"(https?:[^"]+)"/);
-                        if (videoUrlMatch) {
-                            videoUrl = videoUrlMatch[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/');
-                            const thumbMatch = html.match(/"display_url"\s*:\s*"(https?:[^"]+)"/);
-                            thumbnailUrl = thumbMatch ? thumbMatch[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/') : null;
-                            const userMatch = html.match(/"username"\s*:\s*"([^"]+)"/);
-                            username = userMatch ? userMatch[1] : '';
-                            caption = '';
-                            console.log(`[Fetch] ✓ Got video from embedded JSON`);
-                        }
+                    // Unescape/decode quotes, slashes, and characters in the HTML first
+                    const decodedHtml = html
+                        .replace(/\\+/g, '\\')
+                        .replace(/\\u002F/gi, '/')
+                        .replace(/\\u0026/gi, '&')
+                        .replace(/\\\\\//g, '/')
+                        .replace(/\\\//g, '/')
+                        .replace(/\\"/g, '"');
+
+                    const ogVideoSec = decodedHtml.match(/property=["']og:video:secure_url["']\s+content=["']([^"']+)["']/i);
+                    const ogVideo = decodedHtml.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i);
+                    const inlineVideoUrl = decodedHtml.match(/"video_url"\s*:\s*"([^"]+)"/);
+                    const parsedVideoUrl = ogVideoSec?.[1] || ogVideo?.[1] || (inlineVideoUrl ? inlineVideoUrl[1] : null);
+
+                    if (parsedVideoUrl) {
+                        videoUrl = parsedVideoUrl;
+                        const ogImage = decodedHtml.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+                        const inlineDisplay = decodedHtml.match(/"display_url"\s*:\s*"([^"]+)"/);
+                        thumbnailUrl = ogImage?.[1] || (inlineDisplay ? inlineDisplay[1] : null);
+
+                        const userMatch = decodedHtml.match(/"username"\s*:\s*"([^"]+)"/);
+                        if (userMatch) username = userMatch[1];
+
+                        const capMatch = decodedHtml.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                        if (capMatch) caption = capMatch[1];
+
+                        console.log(`[Fetch] ✓ Got video from embed page scrape`);
+                        break;
                     }
+                } catch (e) {
+                    console.log(`[Fetch] Embed /${urlType}/ error:`, e.message);
                 }
-            } catch (e) {
-                console.log('[Fetch] Page scrape error:', e.message);
             }
         }
 
         // ═══ Final response ═══
         if (!videoUrl) {
             console.log('[Fetch] ✗ All methods failed');
+            if (!igSession.sessionid) {
+                return res.status(401).json({
+                    error: 'Could not fetch this post. If it is private or restricted, please log in with your Instagram session ID.',
+                    needsLogin: true
+                });
+            }
             return res.status(404).json({
                 error: 'Could not extract video. This might be a photo post, the account is private and you don\'t follow them, or your session cookie has expired. Try logging out and logging back in with a fresh sessionid.'
             });
@@ -542,23 +553,26 @@ app.post('/api/fetch-public', async (req, res) => {
                     const html = await embedRes.text();
                     if (!html || html.length < 500) continue;
 
-                    const unescapeJson = (s) => s
-                        .replace(/\\u0026/g, '&')
+                    // Unescape/decode quotes, slashes, and characters in the HTML first
+                    const decodedHtml = html
+                        .replace(/\\+/g, '\\')
+                        .replace(/\\u002F/gi, '/')
+                        .replace(/\\u0026/gi, '&')
+                        .replace(/\\\\\//g, '/')
                         .replace(/\\\//g, '/')
-                        .replace(/\\"/g, '"')
-                        .replace(/&amp;/g, '&');
+                        .replace(/\\"/g, '"');
 
                     // Carousels first: look for the embedded "edge_sidecar_to_children" blob
-                    const sidecarMatch = html.match(/"edge_sidecar_to_children"\s*:\s*\{\s*"edges"\s*:\s*(\[[\s\S]*?\])\s*\}/);
+                    const sidecarMatch = decodedHtml.match(/"edge_sidecar_to_children"\s*:\s*\{\s*"edges"\s*:\s*(\[[\s\S]*?\])\s*\}/);
                     if (sidecarMatch) {
                         try {
                             const edges = JSON.parse(sidecarMatch[1]);
                             for (const edge of edges) {
                                 const node = edge.node || edge;
                                 if (node?.is_video && node?.video_url) {
-                                    items.push({ type: 'video', url: unescapeJson(node.video_url), thumbnailUrl: unescapeJson(node.display_url || '') });
+                                    items.push({ type: 'video', url: node.video_url, thumbnailUrl: node.display_url || '' });
                                 } else if (node?.display_url) {
-                                    items.push({ type: 'image', url: unescapeJson(node.display_url), thumbnailUrl: unescapeJson(node.display_url) });
+                                    items.push({ type: 'image', url: node.display_url, thumbnailUrl: node.display_url });
                                 }
                             }
                             if (items.length) console.log(`[PublicFetch] ✓ Got ${items.length} carousel items from embed`);
@@ -569,38 +583,38 @@ app.post('/api/fetch-public', async (req, res) => {
 
                     // Single video: try og:video / inline video_url
                     if (items.length === 0) {
-                        const ogVideoSec = html.match(/property=["']og:video:secure_url["']\s+content=["']([^"']+)["']/i);
-                        const ogVideo = html.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i);
-                        const inlineVideoUrl = html.match(/"video_url"\s*:\s*"([^"]+)"/);
-                        const videoUrl = ogVideoSec?.[1] || ogVideo?.[1] || (inlineVideoUrl ? unescapeJson(inlineVideoUrl[1]) : null);
+                        const ogVideoSec = decodedHtml.match(/property=["']og:video:secure_url["']\s+content=["']([^"']+)["']/i);
+                        const ogVideo = decodedHtml.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i);
+                        const inlineVideoUrl = decodedHtml.match(/"video_url"\s*:\s*"([^"]+)"/);
+                        const videoUrl = ogVideoSec?.[1] || ogVideo?.[1] || (inlineVideoUrl ? inlineVideoUrl[1] : null);
                         if (videoUrl) {
-                            const ogImage = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
-                            const inlineDisplay = html.match(/"display_url"\s*:\s*"([^"]+)"/);
-                            const thumb = ogImage?.[1] || (inlineDisplay ? unescapeJson(inlineDisplay[1]) : null);
-                            items.push({ type: 'video', url: unescapeJson(videoUrl), thumbnailUrl: thumb });
+                            const ogImage = decodedHtml.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+                            const inlineDisplay = decodedHtml.match(/"display_url"\s*:\s*"([^"]+)"/);
+                            const thumb = ogImage?.[1] || (inlineDisplay ? inlineDisplay[1] : null);
+                            items.push({ type: 'video', url: videoUrl, thumbnailUrl: thumb });
                             console.log('[PublicFetch] ✓ Got video from embed');
                         }
                     }
 
                     // Single image: og:image
                     if (items.length === 0) {
-                        const ogImage = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
-                        const inlineDisplay = html.match(/"display_url"\s*:\s*"([^"]+)"/);
-                        const imageUrl = ogImage?.[1] || (inlineDisplay ? unescapeJson(inlineDisplay[1]) : null);
+                        const ogImage = decodedHtml.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+                        const inlineDisplay = decodedHtml.match(/"display_url"\s*:\s*"([^"]+)"/);
+                        const imageUrl = ogImage?.[1] || (inlineDisplay ? inlineDisplay[1] : null);
                         if (imageUrl) {
-                            items.push({ type: 'image', url: unescapeJson(imageUrl), thumbnailUrl: unescapeJson(imageUrl) });
+                            items.push({ type: 'image', url: imageUrl, thumbnailUrl: imageUrl });
                             console.log('[PublicFetch] ✓ Got image from embed');
                         }
                     }
 
                     // Pick up username / caption if we don't have them
                     if (!username) {
-                        const userMatch = html.match(/"username"\s*:\s*"([^"]+)"/);
+                        const userMatch = decodedHtml.match(/"username"\s*:\s*"([^"]+)"/);
                         if (userMatch) username = userMatch[1];
                     }
                     if (!caption) {
-                        const capMatch = html.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-                        if (capMatch) caption = unescapeJson(capMatch[1]);
+                        const capMatch = decodedHtml.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                        if (capMatch) caption = capMatch[1];
                     }
 
                     if (items.length > 0) break;
@@ -746,6 +760,63 @@ app.post('/api/fetch-profile', async (req, res) => {
             console.log('[BulkFetch] Mobile feed error:', e.message);
         }
 
+        // Mobile feed failed. Try GraphQL query fallback for public profile pagination.
+        if (cursor) {
+            console.log(`[BulkFetch] Trying GraphQL fallback for cursor: ${cursor}`);
+            try {
+                const queryHash = 'e7e2f7790b8640edc34d53f27e5a0841';
+                const variables = JSON.stringify({
+                    id: userId,
+                    first: 30,
+                    after: cursor
+                });
+                const gqlUrl = `https://www.instagram.com/graphql/query/?query_hash=${queryHash}&variables=${encodeURIComponent(variables)}`;
+                const gqlRes = await fetch(gqlUrl, {
+                    headers: WEB_HEADERS(),
+                    redirect: 'manual'
+                });
+                console.log(`[BulkFetch] GraphQL page fallback status: ${gqlRes.status}`);
+
+                if (gqlRes.ok) {
+                    const gqlData = await gqlRes.json();
+                    const timeline = gqlData?.data?.user?.edge_owner_to_timeline_media;
+                    if (timeline && timeline.edges) {
+                        const items = timeline.edges.map(edge => {
+                            const node = edge.node;
+                            const mediaUrl = (node.is_video && node.video_url)
+                                ? node.video_url
+                                : (node.display_url || node.thumbnail_src || '');
+                            return {
+                                shortcode: node.shortcode,
+                                id: node.id,
+                                type: node.is_video ? 'video' : 'image',
+                                hasVideoUrl: node.is_video && !!node.video_url,
+                                thumbnailUrl: node.thumbnail_src || node.display_url,
+                                mediaUrl,
+                                caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
+                                likeCount: node.edge_liked_by?.count || 0,
+                                commentCount: node.edge_media_to_comment?.count || 0,
+                                isCarousel: node.__typename === 'GraphSidecar',
+                                timestamp: node.taken_at_timestamp,
+                            };
+                        });
+                        const nextCursor = timeline.page_info?.has_next_page ? timeline.page_info?.end_cursor : null;
+                        console.log(`[BulkFetch] ✓ GraphQL fallback: ${items.length} posts, nextCursor: ${nextCursor}`);
+                        return res.json({
+                            success: true,
+                            items,
+                            profileData,
+                            nextCursor,
+                            totalPosts: profileData?.postCount || 0,
+                            paginationLimited: false,
+                        });
+                    }
+                }
+            } catch (gqlErr) {
+                console.log('[BulkFetch] GraphQL fallback error:', gqlErr.message);
+            }
+        }
+
         // Mobile feed failed. For page 1 we can still return the 12 posts embedded in
         // web_profile_info's response — but pagination beyond that requires auth.
         if (!cursor && embeddedTimeline?.edges?.length > 0) {
@@ -770,14 +841,16 @@ app.post('/api/fetch-profile', async (req, res) => {
                 };
             });
 
-            const paginationLimited = !igSession.sessionid && (profileData?.postCount || 0) > items.length;
-            console.log(`[BulkFetch] ✓ Web-info fallback: ${items.length} posts, paginationLimited=${paginationLimited}`);
+            const pageInfo = embeddedTimeline.page_info || {};
+            const nextCursor = pageInfo.has_next_page ? pageInfo.end_cursor : null;
+            const paginationLimited = !igSession.sessionid && !nextCursor && (profileData?.postCount || 0) > items.length;
+            console.log(`[BulkFetch] ✓ Web-info fallback: ${items.length} posts, nextCursor=${nextCursor}, paginationLimited=${paginationLimited}`);
 
             return res.json({
                 success: true,
                 items,
                 profileData,
-                nextCursor: null,
+                nextCursor,
                 totalPosts: profileData?.postCount || 0,
                 paginationLimited,
             });
@@ -897,12 +970,6 @@ app.post('/api/fetch-post-media', async (req, res) => {
                 'sec-fetch-mode': 'navigate',
             };
 
-            const unescapeJson = (s) => s
-                .replace(/\\u0026/g, '&')
-                .replace(/\\\//g, '/')
-                .replace(/\\"/g, '"')
-                .replace(/&amp;/g, '&');
-
             for (const urlType of ['p', 'reel', 'tv']) {
                 try {
                     const embedUrl = `https://www.instagram.com/${urlType}/${shortcode}/embed/captioned/`;
@@ -914,17 +981,26 @@ app.post('/api/fetch-post-media', async (req, res) => {
                     const html = await embedRes.text();
                     if (!html || html.length < 500) continue;
 
+                    // Unescape/decode quotes, slashes, and characters in the HTML first
+                    const decodedHtml = html
+                        .replace(/\\+/g, '\\')
+                        .replace(/\\u002F/gi, '/')
+                        .replace(/\\u0026/gi, '&')
+                        .replace(/\\\\\//g, '/')
+                        .replace(/\\\//g, '/')
+                        .replace(/\\"/g, '"');
+
                     // Carousels: look for edge_sidecar_to_children
-                    const sidecarMatch = html.match(/"edge_sidecar_to_children"\s*:\s*\{\s*"edges"\s*:\s*(\[[\s\S]*?\])\s*\}/);
+                    const sidecarMatch = decodedHtml.match(/"edge_sidecar_to_children"\s*:\s*\{\s*"edges"\s*:\s*(\[[\s\S]*?\])\s*\}/);
                     if (sidecarMatch) {
                         try {
                             const edges = JSON.parse(sidecarMatch[1]);
                             for (const edge of edges) {
                                 const node = edge.node || edge;
                                 if (node?.is_video && node?.video_url) {
-                                    items.push({ type: 'video', url: unescapeJson(node.video_url) });
+                                    items.push({ type: 'video', url: node.video_url });
                                 } else if (node?.display_url) {
-                                    items.push({ type: 'image', url: unescapeJson(node.display_url) });
+                                    items.push({ type: 'image', url: node.display_url });
                                 }
                             }
                             if (items.length) console.log(`[PostMedia] ✓ Got ${items.length} carousel items from embed`);
@@ -935,23 +1011,23 @@ app.post('/api/fetch-post-media', async (req, res) => {
 
                     // Single video
                     if (items.length === 0) {
-                        const ogVideoSec = html.match(/property=["']og:video:secure_url["']\s+content=["']([^"']+)["']/i);
-                        const ogVideo = html.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i);
-                        const inlineVideoUrl = html.match(/"video_url"\s*:\s*"([^"]+)"/);
-                        const videoUrl = ogVideoSec?.[1] || ogVideo?.[1] || (inlineVideoUrl ? unescapeJson(inlineVideoUrl[1]) : null);
+                        const ogVideoSec = decodedHtml.match(/property=["']og:video:secure_url["']\s+content=["']([^"']+)["']/i);
+                        const ogVideo = decodedHtml.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i);
+                        const inlineVideoUrl = decodedHtml.match(/"video_url"\s*:\s*"([^"]+)"/);
+                        const videoUrl = ogVideoSec?.[1] || ogVideo?.[1] || (inlineVideoUrl ? inlineVideoUrl[1] : null);
                         if (videoUrl) {
-                            items.push({ type: 'video', url: unescapeJson(videoUrl) });
+                            items.push({ type: 'video', url: videoUrl });
                             console.log('[PostMedia] ✓ Got video from embed');
                         }
                     }
 
                     // Single image
                     if (items.length === 0) {
-                        const ogImage = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
-                        const inlineDisplay = html.match(/"display_url"\s*:\s*"([^"]+)"/);
-                        const imageUrl = ogImage?.[1] || (inlineDisplay ? unescapeJson(inlineDisplay[1]) : null);
+                        const ogImage = decodedHtml.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+                        const inlineDisplay = decodedHtml.match(/"display_url"\s*:\s*"([^"]+)"/);
+                        const imageUrl = ogImage?.[1] || (inlineDisplay ? inlineDisplay[1] : null);
                         if (imageUrl) {
-                            items.push({ type: 'image', url: unescapeJson(imageUrl) });
+                            items.push({ type: 'image', url: imageUrl });
                             console.log('[PostMedia] ✓ Got image from embed');
                         }
                     }
