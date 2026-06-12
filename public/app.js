@@ -195,18 +195,36 @@ function renderPublicMedia(data) {
 
         const proxyUrl = `${API_BASE}/api/proxy-image?url=${encodeURIComponent(item.thumbnailUrl || item.url)}`;
 
+        let downloadButtons = `
+            <button class="media-item-download" onclick="event.stopPropagation(); downloadPublicItem(${index})" title="Download Media">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+            </button>
+        `;
+
+        if (item.type === 'video' && (item.thumbnailUrl || item.url)) {
+            downloadButtons += `
+                <button class="media-item-download" onclick="event.stopPropagation(); downloadPublicItemThumbnail(${index})" title="Download Thumbnail" style="margin-left: 6px; background: rgba(255,255,255,0.35);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                </button>
+            `;
+        }
+
         div.innerHTML = `
             <img src="${proxyUrl}" alt="Media ${index + 1}" loading="lazy">
             <span class="media-type-badge">${item.type === 'video' ? '▶ Video' : '📷 Photo'}</span>
             <div class="media-item-overlay">
                 <span></span>
-                <button class="media-item-download" onclick="event.stopPropagation(); downloadPublicItem(${index})" title="Download">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                </button>
+                <div style="display: flex;">
+                    ${downloadButtons}
+                </div>
             </div>
         `;
         grid.appendChild(div);
@@ -239,6 +257,35 @@ function downloadPublicItem(index) {
         })
         .catch(err => {
             console.error('Download failed:', err);
+            showToast('❌', 'Download failed');
+        });
+}
+
+function downloadPublicItemThumbnail(index) {
+    if (!currentPublicMediaData || !currentPublicMediaData.items[index]) return;
+    const item = currentPublicMediaData.items[index];
+    const thumbUrl = item.thumbnailUrl || item.url;
+    if (!thumbUrl) return;
+
+    const filename = `instasave_${currentPublicMediaData.shortcode || 'media'}_${index + 1}_thumb.jpg`;
+    const downloadUrl = `${API_BASE}/api/proxy-image?url=${encodeURIComponent(thumbUrl)}&download=true&filename=${encodeURIComponent(filename)}`;
+
+    showToast('⬇️', 'Downloading thumbnail...');
+
+    fetch(downloadUrl)
+        .then(res => res.blob())
+        .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+        })
+        .catch(err => {
+            console.error('Thumbnail download failed:', err);
             showToast('❌', 'Download failed');
         });
 }
@@ -1186,6 +1233,10 @@ async function fetchVideo() {
 
         hideLoading();
         showPlayer();
+        const btnDownloadThumb = document.getElementById('btnDownloadThumb');
+        if (btnDownloadThumb) {
+            btnDownloadThumb.style.display = data.thumbnailUrl ? 'flex' : 'none';
+        }
         videoPlayer.play().catch(() => { /* autoplay blocked — that's ok */ });
 
     } catch (err) {
@@ -1228,6 +1279,8 @@ function hidePlayer() {
     playerCard.classList.remove('visible');
     videoPlayer.pause();
     videoPlayer.src = '';
+    const btnDownloadThumb = document.getElementById('btnDownloadThumb');
+    if (btnDownloadThumb) btnDownloadThumb.style.display = 'none';
 }
 
 // ─── Download & Copy ───────────────────────────────────────────
@@ -1242,6 +1295,31 @@ function downloadVideo() {
     a.click();
     document.body.removeChild(a);
     showToast('⬇️', 'Download started!');
+}
+
+function downloadVideoThumbnail() {
+    if (!currentVideoData || !currentVideoData.thumbnailUrl) return;
+    const filename = `instasave_${currentVideoData.shortcode || 'video'}_thumb.jpg`;
+    const downloadUrl = `${API_BASE}/api/proxy-image?url=${encodeURIComponent(currentVideoData.thumbnailUrl)}&download=true&filename=${encodeURIComponent(filename)}`;
+
+    showToast('⬇️', 'Downloading thumbnail...');
+
+    fetch(downloadUrl)
+        .then(res => res.blob())
+        .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+        })
+        .catch(err => {
+            console.error('Thumbnail download failed:', err);
+            showToast('❌', 'Download failed');
+        });
 }
 
 function copyVideoLink() {
