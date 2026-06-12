@@ -519,14 +519,103 @@ app.post('/api/fetch-public', async (req, res) => {
             }
         }
 
+        // ═══ Method 3: Embed page scrape (works without authentication) ═══
+        // Instagram's /embed/captioned/ endpoint is publicly accessible — it's the
+        // fallback that lets us get public posts when the auth-gated APIs above refuse.
+        if (items.length === 0) {
+            console.log('[PublicFetch] Trying embed page scrape...');
+            const embedHeaders = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'sec-fetch-mode': 'navigate',
+            };
+            // Try each URL flavour — Instagram serves the same content under /p/, /reel/, /tv/
+            for (const urlType of ['p', 'reel', 'tv']) {
+                try {
+                    const embedUrl = `https://www.instagram.com/${urlType}/${shortcode}/embed/captioned/`;
+                    const embedRes = await fetch(embedUrl, { headers: embedHeaders, redirect: 'manual' });
+                    if (!embedRes.ok) {
+                        console.log(`[PublicFetch] Embed /${urlType}/ status: ${embedRes.status}`);
+                        continue;
+                    }
+                    const html = await embedRes.text();
+                    if (!html || html.length < 500) continue;
+
+                    const unescapeJson = (s) => s
+                        .replace(/\\u0026/g, '&')
+                        .replace(/\\\//g, '/')
+                        .replace(/\\"/g, '"')
+                        .replace(/&amp;/g, '&');
+
+                    // Carousels first: look for the embedded "edge_sidecar_to_children" blob
+                    const sidecarMatch = html.match(/"edge_sidecar_to_children"\s*:\s*\{\s*"edges"\s*:\s*(\[[\s\S]*?\])\s*\}/);
+                    if (sidecarMatch) {
+                        try {
+                            const edges = JSON.parse(sidecarMatch[1]);
+                            for (const edge of edges) {
+                                const node = edge.node || edge;
+                                if (node?.is_video && node?.video_url) {
+                                    items.push({ type: 'video', url: unescapeJson(node.video_url), thumbnailUrl: unescapeJson(node.display_url || '') });
+                                } else if (node?.display_url) {
+                                    items.push({ type: 'image', url: unescapeJson(node.display_url), thumbnailUrl: unescapeJson(node.display_url) });
+                                }
+                            }
+                            if (items.length) console.log(`[PublicFetch] ✓ Got ${items.length} carousel items from embed`);
+                        } catch (e) {
+                            console.log('[PublicFetch] Embed carousel parse error:', e.message);
+                        }
+                    }
+
+                    // Single video: try og:video / inline video_url
+                    if (items.length === 0) {
+                        const ogVideoSec = html.match(/property=["']og:video:secure_url["']\s+content=["']([^"']+)["']/i);
+                        const ogVideo = html.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i);
+                        const inlineVideoUrl = html.match(/"video_url"\s*:\s*"([^"]+)"/);
+                        const videoUrl = ogVideoSec?.[1] || ogVideo?.[1] || (inlineVideoUrl ? unescapeJson(inlineVideoUrl[1]) : null);
+                        if (videoUrl) {
+                            const ogImage = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+                            const inlineDisplay = html.match(/"display_url"\s*:\s*"([^"]+)"/);
+                            const thumb = ogImage?.[1] || (inlineDisplay ? unescapeJson(inlineDisplay[1]) : null);
+                            items.push({ type: 'video', url: unescapeJson(videoUrl), thumbnailUrl: thumb });
+                            console.log('[PublicFetch] ✓ Got video from embed');
+                        }
+                    }
+
+                    // Single image: og:image
+                    if (items.length === 0) {
+                        const ogImage = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+                        const inlineDisplay = html.match(/"display_url"\s*:\s*"([^"]+)"/);
+                        const imageUrl = ogImage?.[1] || (inlineDisplay ? unescapeJson(inlineDisplay[1]) : null);
+                        if (imageUrl) {
+                            items.push({ type: 'image', url: unescapeJson(imageUrl), thumbnailUrl: unescapeJson(imageUrl) });
+                            console.log('[PublicFetch] ✓ Got image from embed');
+                        }
+                    }
+
+                    // Pick up username / caption if we don't have them
+                    if (!username) {
+                        const userMatch = html.match(/"username"\s*:\s*"([^"]+)"/);
+                        if (userMatch) username = userMatch[1];
+                    }
+                    if (!caption) {
+                        const capMatch = html.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                        if (capMatch) caption = unescapeJson(capMatch[1]);
+                    }
+
+                    if (items.length > 0) break;
+                } catch (e) {
+                    console.log(`[PublicFetch] Embed /${urlType}/ error:`, e.message);
+                }
+            }
+        }
+
         if (items.length === 0) {
             console.log('[PublicFetch] ✗ All methods failed');
-            const needsLogin = !igSession.sessionid;
             return res.status(404).json({
-                error: needsLogin
-                    ? 'Could not fetch media. Please click Login (top right) and enter your session ID — Instagram requires authentication even for public posts. You only need to do this once!'
-                    : 'Could not extract media. The post might be from a private account, or your session expired. Try logging out and back in with a fresh session ID.',
-                needsLogin,
+                error: igSession.sessionid
+                    ? 'Could not extract media. The post might be from a private account, or your session expired.'
+                    : 'Could not fetch this post. Instagram may have rate-limited the request — try again in a minute, or use the Private & Exclusive tab with a session ID if it\'s a private/restricted post.',
             });
         }
 
@@ -544,9 +633,14 @@ app.post('/api/fetch-public', async (req, res) => {
 });
 
 
-// ─── BULK PROFILE FETCH (Paginated via Mobile API) ────────────────────
+// ─── BULK PROFILE FETCH (Paginated via Mobile Feed API) ───────────────
+// IMPORTANT: pagination uses ONE cursor format throughout. The mobile-feed API
+// returns `next_max_id` (e.g. "3001234_56789"); the web profile-info endpoint
+// returns a GraphQL `end_cursor` (base64). Mixing them silently breaks page 2.
+// We always paginate via mobile feed and only use web_profile_info for the
+// initial user_id lookup + as a 12-post fallback when mobile feed is blocked.
 app.post('/api/fetch-profile', async (req, res) => {
-    const { profileUrl, cursor } = req.body;
+    const { profileUrl, cursor, userId: providedUserId } = req.body;
     if (!profileUrl) {
         return res.status(400).json({ error: 'Profile URL is required' });
     }
@@ -556,99 +650,88 @@ app.post('/api/fetch-profile', async (req, res) => {
         return res.status(400).json({ error: 'Invalid Instagram profile URL' });
     }
     const profileUsername = usernameMatch[1];
-    console.log(`\n[BulkFetch] Profile: @${profileUsername}, cursor: ${cursor || 'start'}`);
+    console.log(`\n[BulkFetch] Profile: @${profileUsername}, cursor: ${cursor || 'start'}, userId: ${providedUserId || 'lookup'}`);
 
     try {
-        // Step 1: Get user info and ID
-        let userId = null;
+        let userId = providedUserId || null;
         let profileData = null;
+        let embeddedTimeline = null;
 
-        const infoRes = await fetch(`https://i.instagram.com/api/v1/users/web_profile_info/?username=${profileUsername}`, {
-            headers: { ...WEB_HEADERS(), 'Accept': '*/*' },
-            redirect: 'manual',
-        });
-        console.log(`[BulkFetch] Profile info status: ${infoRes.status}`);
+        // Look up user_id + profile metadata if we don't have it yet
+        if (!userId) {
+            const infoRes = await fetch(`https://i.instagram.com/api/v1/users/web_profile_info/?username=${profileUsername}`, {
+                headers: { ...WEB_HEADERS(), 'Accept': '*/*' },
+                redirect: 'manual',
+            });
+            console.log(`[BulkFetch] Profile info status: ${infoRes.status}`);
 
-        if (infoRes.ok) {
-            const infoData = await infoRes.json();
-            const user = infoData?.data?.user;
-            if (user) {
-                userId = user.id;
-                profileData = {
-                    username: user.username,
-                    fullName: user.full_name,
-                    profilePic: user.profile_pic_url_hd || user.profile_pic_url,
-                    postCount: user.edge_owner_to_timeline_media?.count || 0,
-                    isPrivate: user.is_private,
-                };
-                console.log(`[BulkFetch] ✓ User: @${user.username} (ID: ${userId}), posts: ${profileData.postCount}`);
+            if (infoRes.ok) {
+                const infoData = await infoRes.json();
+                const user = infoData?.data?.user;
+                if (user) {
+                    userId = user.id;
+                    profileData = {
+                        userId: user.id,
+                        username: user.username,
+                        fullName: user.full_name,
+                        profilePic: user.profile_pic_url_hd || user.profile_pic_url,
+                        postCount: user.edge_owner_to_timeline_media?.count || 0,
+                        isPrivate: user.is_private,
+                    };
+                    embeddedTimeline = user.edge_owner_to_timeline_media || null;
+                    console.log(`[BulkFetch] ✓ User: @${user.username} (ID: ${userId}), posts: ${profileData.postCount}`);
 
-                if (profileData.isPrivate && !igSession.sessionid) {
-                    return res.status(403).json({
-                        error: `@${profileData.username}'s account is private. Use the "Private & Exclusive" tab with your session ID.`,
-                    });
-                }
-
-                // Page 1: return timeline from profile info
-                if (!cursor) {
-                    const timeline = user.edge_owner_to_timeline_media;
-                    if (timeline) {
-                        const items = (timeline.edges || []).map(edge => {
-                            const node = edge.node;
-                            return {
-                                shortcode: node.shortcode,
-                                id: node.id,
-                                type: node.is_video ? 'video' : 'image',
-                                thumbnailUrl: node.thumbnail_src || node.display_url,
-                                caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
-                                likeCount: node.edge_liked_by?.count || 0,
-                                commentCount: node.edge_media_to_comment?.count || 0,
-                                isCarousel: node.__typename === 'GraphSidecar',
-                                timestamp: node.taken_at_timestamp,
-                            };
-                        });
-
-                        const pageInfo = timeline.page_info || {};
-                        console.log(`[BulkFetch] ✓ Page 1: ${items.length} posts, hasNext: ${pageInfo.has_next_page}`);
-
-                        return res.json({
-                            success: true,
-                            items,
-                            profileData,
-                            nextCursor: pageInfo.has_next_page ? pageInfo.end_cursor : null,
-                            totalPosts: profileData.postCount,
+                    if (profileData.isPrivate && !igSession.sessionid) {
+                        return res.status(403).json({
+                            error: `@${profileData.username}'s account is private. Use the "Private & Exclusive" tab with your session ID.`,
                         });
                     }
                 }
             }
+
+            if (!userId) {
+                return res.status(404).json({
+                    error: `Could not find @${profileUsername}, or Instagram blocked the lookup. Try again in a minute.`,
+                });
+            }
         }
 
-        // Step 2: Pagination (page 2+) — use Mobile API feed
-        if (userId && cursor) {
-            console.log(`[BulkFetch] Fetching page 2+ via mobile feed API, max_id: ${cursor}`);
-            try {
-                const feedRes = await fetch(
-                    `https://i.instagram.com/api/v1/feed/user/${userId}/?count=25&max_id=${cursor}`,
-                    { headers: MOBILE_HEADERS() }
-                );
-                console.log(`[BulkFetch] Mobile feed status: ${feedRes.status}`);
+        // Try mobile feed for posts — works for both page 1 (no cursor) and page 2+ (with cursor).
+        // Output cursor format is the same across pages, so pagination is consistent.
+        const feedUrl = cursor
+            ? `https://i.instagram.com/api/v1/feed/user/${userId}/?count=30&max_id=${encodeURIComponent(cursor)}`
+            : `https://i.instagram.com/api/v1/feed/user/${userId}/?count=30`;
+        try {
+            const feedRes = await fetch(feedUrl, { headers: MOBILE_HEADERS() });
+            console.log(`[BulkFetch] Mobile feed status: ${feedRes.status}`);
 
-                if (feedRes.ok) {
-                    const feedData = await feedRes.json();
-                    const items = (feedData.items || []).map(item => ({
-                        shortcode: item.code,
-                        id: item.id,
-                        type: (item.video_versions || item.media_type === 2) ? 'video' : 'image',
-                        thumbnailUrl: item.image_versions2?.candidates?.[1]?.url || item.image_versions2?.candidates?.[0]?.url || '',
-                        caption: item.caption?.text || '',
-                        likeCount: item.like_count || 0,
-                        commentCount: item.comment_count || 0,
-                        isCarousel: !!item.carousel_media,
-                        timestamp: item.taken_at,
-                    }));
+            if (feedRes.ok) {
+                const feedData = await feedRes.json();
+                const feedItems = feedData.items || [];
+                if (feedItems.length > 0) {
+                    const items = feedItems.map(item => {
+                        const isVideo = !!(item.video_versions || item.media_type === 2);
+                        // Full-res media URL for direct download
+                        const mediaUrl = isVideo
+                            ? (item.video_versions?.[0]?.url || '')
+                            : (item.image_versions2?.candidates?.[0]?.url || '');
+                        return {
+                            shortcode: item.code,
+                            id: item.id,
+                            type: isVideo ? 'video' : 'image',
+                            hasVideoUrl: isVideo && !!(item.video_versions?.[0]?.url),
+                            thumbnailUrl: item.image_versions2?.candidates?.[1]?.url || item.image_versions2?.candidates?.[0]?.url || '',
+                            mediaUrl,
+                            caption: item.caption?.text || '',
+                            likeCount: item.like_count || 0,
+                            commentCount: item.comment_count || 0,
+                            isCarousel: !!item.carousel_media,
+                            timestamp: item.taken_at,
+                        };
+                    });
 
                     const nextMaxId = feedData.next_max_id || null;
-                    console.log(`[BulkFetch] ✓ Page 2+: ${items.length} posts, hasNext: ${!!nextMaxId}`);
+                    console.log(`[BulkFetch] ✓ Feed ${cursor ? 'page 2+' : 'page 1'}: ${items.length} posts, hasNext: ${!!nextMaxId}`);
 
                     return res.json({
                         success: true,
@@ -658,15 +741,53 @@ app.post('/api/fetch-profile', async (req, res) => {
                         totalPosts: profileData?.postCount || 0,
                     });
                 }
-            } catch (e) {
-                console.log('[BulkFetch] Mobile feed error:', e.message);
             }
+        } catch (e) {
+            console.log('[BulkFetch] Mobile feed error:', e.message);
         }
 
+        // Mobile feed failed. For page 1 we can still return the 12 posts embedded in
+        // web_profile_info's response — but pagination beyond that requires auth.
+        if (!cursor && embeddedTimeline?.edges?.length > 0) {
+            const items = embeddedTimeline.edges.map(edge => {
+                const node = edge.node;
+                // For web fallback, display_url is typically the highest quality image
+                const mediaUrl = (node.is_video && node.video_url)
+                    ? node.video_url
+                    : (node.display_url || node.thumbnail_src || '');
+                return {
+                    shortcode: node.shortcode,
+                    id: node.id,
+                    type: node.is_video ? 'video' : 'image',
+                    hasVideoUrl: node.is_video && !!node.video_url,
+                    thumbnailUrl: node.thumbnail_src || node.display_url,
+                    mediaUrl,
+                    caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
+                    likeCount: node.edge_liked_by?.count || 0,
+                    commentCount: node.edge_media_to_comment?.count || 0,
+                    isCarousel: node.__typename === 'GraphSidecar',
+                    timestamp: node.taken_at_timestamp,
+                };
+            });
+
+            const paginationLimited = !igSession.sessionid && (profileData?.postCount || 0) > items.length;
+            console.log(`[BulkFetch] ✓ Web-info fallback: ${items.length} posts, paginationLimited=${paginationLimited}`);
+
+            return res.json({
+                success: true,
+                items,
+                profileData,
+                nextCursor: null,
+                totalPosts: profileData?.postCount || 0,
+                paginationLimited,
+            });
+        }
+
+        // Page 2+ failed — be honest about why.
         return res.status(404).json({
-            error: !igSession.sessionid
-                ? 'Could not fetch profile. Please click Login and enter your session ID for best results.'
-                : 'Could not fetch profile. The account may be private or Instagram blocked the request.',
+            error: igSession.sessionid
+                ? 'Could not fetch more posts. Instagram blocked the request — try again in a minute.'
+                : 'Instagram blocks paginating past the first 12 posts without a session. Click Login (top right) and paste your session ID to load the rest.',
         });
     } catch (err) {
         console.error('[BulkFetch] Error:', err);
@@ -687,37 +808,167 @@ app.post('/api/fetch-post-media', async (req, res) => {
     let items = [];
 
     try {
-        // Try mobile API first (with session if available)
-        const mobileRes = await fetch(`https://i.instagram.com/api/v1/media/${mediaId}/info/`, {
-            headers: MOBILE_HEADERS(),
-        });
-        console.log(`[PostMedia] Mobile API status: ${mobileRes.status}`);
+        // ═══ Method 1: Mobile API (most reliable when not rate-limited) ═══
+        try {
+            const mobileRes = await fetch(`https://i.instagram.com/api/v1/media/${mediaId}/info/`, {
+                headers: MOBILE_HEADERS(),
+            });
+            console.log(`[PostMedia] Mobile API status: ${mobileRes.status}`);
 
-        if (mobileRes.ok) {
-            const data = await mobileRes.json();
-            if (data.items && data.items.length > 0) {
-                const item = data.items[0];
+            if (mobileRes.ok) {
+                const data = await mobileRes.json();
+                if (data.items && data.items.length > 0) {
+                    const item = data.items[0];
 
-                if (item.carousel_media) {
-                    for (const cm of item.carousel_media) {
-                        if (cm.video_versions && cm.video_versions.length > 0) {
-                            items.push({ type: 'video', url: cm.video_versions[0].url });
-                        } else if (cm.image_versions2?.candidates?.length > 0) {
-                            items.push({ type: 'image', url: cm.image_versions2.candidates[0].url });
+                    if (item.carousel_media) {
+                        for (const cm of item.carousel_media) {
+                            if (cm.video_versions && cm.video_versions.length > 0) {
+                                items.push({ type: 'video', url: cm.video_versions[0].url });
+                            } else if (cm.image_versions2?.candidates?.length > 0) {
+                                items.push({ type: 'image', url: cm.image_versions2.candidates[0].url });
+                            }
+                        }
+                    } else if (item.video_versions && item.video_versions.length > 0) {
+                        items.push({ type: 'video', url: item.video_versions[0].url });
+                    } else if (item.image_versions2?.candidates?.length > 0) {
+                        items.push({ type: 'image', url: item.image_versions2.candidates[0].url });
+                    }
+                }
+            }
+        } catch (e) {
+            console.log('[PostMedia] Mobile API error:', e.message);
+        }
+
+        // ═══ Method 2: Web GraphQL (fallback) ═══
+        if (items.length === 0) {
+            console.log('[PostMedia] Trying GraphQL fallback...');
+            try {
+                const gqlRes = await fetch('https://www.instagram.com/graphql/query/', {
+                    method: 'POST',
+                    headers: {
+                        ...WEB_HEADERS(),
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': '*/*',
+                    },
+                    body: `query_hash=b3055c01b4b222b8a47dc12b090e4e64&variables=${encodeURIComponent(JSON.stringify({
+                        shortcode,
+                        child_comment_count: 3,
+                        fetch_comment_count: 40,
+                        parent_comment_count: 24,
+                        has_threaded_comments: true
+                    }))}`,
+                    redirect: 'manual',
+                });
+                console.log(`[PostMedia] GraphQL status: ${gqlRes.status}`);
+
+                if (gqlRes.ok) {
+                    const gqlData = await gqlRes.json();
+                    const media = gqlData?.data?.shortcode_media;
+                    if (media) {
+                        if (media.edge_sidecar_to_children) {
+                            for (const edge of media.edge_sidecar_to_children.edges || []) {
+                                const node = edge.node;
+                                if (node.is_video && node.video_url) {
+                                    items.push({ type: 'video', url: node.video_url });
+                                } else if (node.display_url) {
+                                    items.push({ type: 'image', url: node.display_url });
+                                }
+                            }
+                        } else if (media.is_video && media.video_url) {
+                            items.push({ type: 'video', url: media.video_url });
+                        } else if (media.display_url) {
+                            items.push({ type: 'image', url: media.display_url });
+                        }
+                        if (items.length > 0) console.log(`[PostMedia] ✓ Got ${items.length} items from GraphQL`);
+                    }
+                }
+            } catch (e) {
+                console.log('[PostMedia] GraphQL error:', e.message);
+            }
+        }
+
+        // ═══ Method 3: Embed page scrape (works without authentication) ═══
+        if (items.length === 0) {
+            console.log('[PostMedia] Trying embed page scrape...');
+            const embedHeaders = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'sec-fetch-mode': 'navigate',
+            };
+
+            const unescapeJson = (s) => s
+                .replace(/\\u0026/g, '&')
+                .replace(/\\\//g, '/')
+                .replace(/\\"/g, '"')
+                .replace(/&amp;/g, '&');
+
+            for (const urlType of ['p', 'reel', 'tv']) {
+                try {
+                    const embedUrl = `https://www.instagram.com/${urlType}/${shortcode}/embed/captioned/`;
+                    const embedRes = await fetch(embedUrl, { headers: embedHeaders, redirect: 'manual' });
+                    if (!embedRes.ok) {
+                        console.log(`[PostMedia] Embed /${urlType}/ status: ${embedRes.status}`);
+                        continue;
+                    }
+                    const html = await embedRes.text();
+                    if (!html || html.length < 500) continue;
+
+                    // Carousels: look for edge_sidecar_to_children
+                    const sidecarMatch = html.match(/"edge_sidecar_to_children"\s*:\s*\{\s*"edges"\s*:\s*(\[[\s\S]*?\])\s*\}/);
+                    if (sidecarMatch) {
+                        try {
+                            const edges = JSON.parse(sidecarMatch[1]);
+                            for (const edge of edges) {
+                                const node = edge.node || edge;
+                                if (node?.is_video && node?.video_url) {
+                                    items.push({ type: 'video', url: unescapeJson(node.video_url) });
+                                } else if (node?.display_url) {
+                                    items.push({ type: 'image', url: unescapeJson(node.display_url) });
+                                }
+                            }
+                            if (items.length) console.log(`[PostMedia] ✓ Got ${items.length} carousel items from embed`);
+                        } catch (e) {
+                            console.log('[PostMedia] Embed carousel parse error:', e.message);
                         }
                     }
-                } else if (item.video_versions && item.video_versions.length > 0) {
-                    items.push({ type: 'video', url: item.video_versions[0].url });
-                } else if (item.image_versions2?.candidates?.length > 0) {
-                    items.push({ type: 'image', url: item.image_versions2.candidates[0].url });
+
+                    // Single video
+                    if (items.length === 0) {
+                        const ogVideoSec = html.match(/property=["']og:video:secure_url["']\s+content=["']([^"']+)["']/i);
+                        const ogVideo = html.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i);
+                        const inlineVideoUrl = html.match(/"video_url"\s*:\s*"([^"]+)"/);
+                        const videoUrl = ogVideoSec?.[1] || ogVideo?.[1] || (inlineVideoUrl ? unescapeJson(inlineVideoUrl[1]) : null);
+                        if (videoUrl) {
+                            items.push({ type: 'video', url: unescapeJson(videoUrl) });
+                            console.log('[PostMedia] ✓ Got video from embed');
+                        }
+                    }
+
+                    // Single image
+                    if (items.length === 0) {
+                        const ogImage = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+                        const inlineDisplay = html.match(/"display_url"\s*:\s*"([^"]+)"/);
+                        const imageUrl = ogImage?.[1] || (inlineDisplay ? unescapeJson(inlineDisplay[1]) : null);
+                        if (imageUrl) {
+                            items.push({ type: 'image', url: unescapeJson(imageUrl) });
+                            console.log('[PostMedia] ✓ Got image from embed');
+                        }
+                    }
+
+                    if (items.length > 0) break;
+                } catch (e) {
+                    console.log(`[PostMedia] Embed /${urlType}/ error:`, e.message);
                 }
             }
         }
 
         if (items.length === 0) {
-            return res.status(404).json({ error: 'Could not fetch media for this post.' });
+            console.log('[PostMedia] ✗ All methods failed');
+            return res.status(404).json({ error: 'Could not fetch media for this post. Try logging in with your session ID.' });
         }
 
+        console.log(`[PostMedia] ✓ Returning ${items.length} media items`);
         return res.json({ success: true, items });
     } catch (err) {
         console.error('[PostMedia] Error:', err);
@@ -725,18 +976,23 @@ app.post('/api/fetch-post-media', async (req, res) => {
     }
 });
 
-// Proxy video stream (avoids CORS issues)
+// Proxy video stream (avoids CORS issues) — pick UA based on CDN host
 app.get('/api/proxy-video', async (req, res) => {
     const { url } = req.query;
     if (!url) {
         return res.status(400).json({ error: 'Video URL is required' });
     }
 
+    const isInstagramCdn = /cdninstagram|instagram\.com/i.test(url);
+    const ua = isInstagramCdn
+        ? 'Instagram 275.0.0.27.98 Android (33/13; 420dpi; 1080x2400; samsung; SM-G991B; o1s; exynos2100; en_US; 458229258)'
+        : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
     try {
         const response = await fetch(url, {
             headers: {
-                'User-Agent': 'Instagram 275.0.0.27.98 Android (33/13; 420dpi; 1080x2400; samsung; SM-G991B; o1s; exynos2100; en_US; 458229258)',
-                'Cookie': buildCookieHeader(),
+                'User-Agent': ua,
+                ...(isInstagramCdn ? { 'Cookie': buildCookieHeader() } : {}),
             },
         });
 
@@ -761,23 +1017,32 @@ app.get('/api/proxy-video', async (req, res) => {
     }
 });
 
-// Proxy thumbnail
+// Proxy thumbnail — pick a UA that fits the CDN: Instagram CDN prefers the IG mobile UA,
+// Facebook CDN serves a desktop browser UA, anything else gets a generic Chrome.
 app.get('/api/proxy-image', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'URL required' });
 
+    const isInstagramCdn = /(?:cdninstagram|fbcdn).+instagram/i.test(url) || /instagram\.com/i.test(url);
+    const isFacebookCdn = /fbcdn\.net|facebook\.com/i.test(url) && !isInstagramCdn;
+    const ua = isInstagramCdn
+        ? 'Instagram 275.0.0.27.98 Android'
+        : isFacebookCdn
+            ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+            : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
     try {
         const response = await fetch(url, {
             headers: {
-                'User-Agent': 'Instagram 275.0.0.27.98 Android',
-                'Cookie': buildCookieHeader(),
+                'User-Agent': ua,
+                // Only send IG cookies to IG CDN — sending them to FB would taint the request
+                ...(isInstagramCdn ? { 'Cookie': buildCookieHeader() } : {}),
             },
         });
         if (!response.ok) return res.status(response.status).end();
         res.setHeader('Content-Type', response.headers.get('content-type') || 'image/jpeg');
-        // Force download if ?download=true
         if (req.query.download === 'true') {
-            const filename = req.query.filename || 'instasave_image.jpg';
+            const filename = req.query.filename || 'omnisave_image.jpg';
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         }
         response.body.pipe(res);
@@ -793,10 +1058,9 @@ app.post('/api/fetch-stories', async (req, res) => {
         return res.status(400).json({ error: 'URL is required' });
     }
 
-    if (!igSession.sessionid) {
-        return res.status(401).json({ error: 'Please login first. Stories require your session ID to access.', needsLogin: true });
-    }
-
+    // Note: we DON'T hard-block on missing sessionid here. Instagram's stories API
+    // generally rejects anonymous requests, but we try anyway so the user gets a real
+    // error from Instagram rather than a preemptive "please log in" wall.
     const trimmedUrl = url.trim();
     console.log(`\n[Stories] URL: ${trimmedUrl}`);
 
@@ -877,30 +1141,48 @@ app.post('/api/fetch-stories', async (req, res) => {
         );
         console.log(`[Stories] Story API status: ${storyRes.status}`);
 
-        if (storyRes.ok) {
-            const storyData = await storyRes.json();
-            const reel = storyData.reels_media?.[0] || storyData.reels?.[userId];
-            if (reel && reel.items && reel.items.length > 0) {
-                const items = reel.items.map(item => {
-                    const isVideo = item.media_type === 2 || !!item.video_versions;
-                    return {
-                        type: isVideo ? 'video' : 'image',
-                        url: isVideo
-                            ? item.video_versions[0].url
-                            : item.image_versions2.candidates[0].url,
-                        thumbnailUrl: item.image_versions2?.candidates?.[0]?.url || null,
-                        timestamp: item.taken_at,
-                    };
-                });
-                console.log(`[Stories] ✓ Got ${items.length} stories for @${storyUsername}`);
-                return res.json({
-                    success: true,
-                    type: 'story',
-                    username: storyUsername,
-                    profilePic: reel.user?.profile_pic_url || '',
-                    items,
-                });
-            }
+        // Non-OK response (401/403/etc) — Instagram refused. Auth is almost certainly the cause.
+        if (!storyRes.ok) {
+            return res.status(401).json({
+                error: igSession.sessionid
+                    ? 'Instagram refused the story request — your session may have expired. Try logging out and back in.'
+                    : 'Instagram requires a logged-in session to view stories. Click Login (top right) and paste your session ID.',
+                needsLogin: !igSession.sessionid,
+            });
+        }
+
+        const storyData = await storyRes.json();
+        const reel = storyData.reels_media?.[0] || storyData.reels?.[userId];
+        if (reel && reel.items && reel.items.length > 0) {
+            const items = reel.items.map(item => {
+                const isVideo = item.media_type === 2 || !!item.video_versions;
+                return {
+                    type: isVideo ? 'video' : 'image',
+                    url: isVideo
+                        ? item.video_versions[0].url
+                        : item.image_versions2.candidates[0].url,
+                    thumbnailUrl: item.image_versions2?.candidates?.[0]?.url || null,
+                    timestamp: item.taken_at,
+                };
+            });
+            console.log(`[Stories] ✓ Got ${items.length} stories for @${storyUsername}`);
+            return res.json({
+                success: true,
+                type: 'story',
+                username: storyUsername,
+                profilePic: reel.user?.profile_pic_url || '',
+                items,
+            });
+        }
+
+        // Got 200 OK but empty payload. WITHOUT a session this is Instagram silently refusing
+        // (it never returns real data to anonymous callers). Don't tell the user "no stories"
+        // when the truth is "we weren't allowed to look".
+        if (!igSession.sessionid) {
+            return res.status(401).json({
+                error: 'Instagram needs a logged-in session to fetch stories. Click Login (top right) and paste your session ID — public stories aren\'t accessible without one.',
+                needsLogin: true,
+            });
         }
 
         return res.json({
@@ -1616,6 +1898,335 @@ function cleanupTempFiles(basePath) {
         }
     } catch {}
 }
+
+// ─── FACEBOOK DOWNLOADER ──────────────────────────────────────────────
+// Strategy:
+//   • Videos (any FB URL with a video): yt-dlp handles facebook.com/watch, /reel/,
+//     /share/v/, fb.watch/, /{user}/videos/{id} natively. It already lives in
+//     this app for YouTube — we just point it at the FB URL.
+//   • Photo posts / image-only posts: fall back to scraping og:image and
+//     og:video meta tags from the page, which Facebook still serves
+//     unauthenticated for link-preview crawlers.
+//   • Profile listing: scrape mbasic.facebook.com (the lightweight mobile UI),
+//     which is the only public FB surface that survives without a session.
+
+const FB_DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const FB_MBASIC_UA = 'Mozilla/5.0 (compatible; FacebookCrawler/1.0; +https://developers.facebook.com/docs/sharing/webmasters/crawler/)';
+
+function isFacebookUrl(u) {
+    return /(?:^|\/\/)(?:m\.|www\.|mbasic\.)?(?:facebook\.com|fb\.watch|fb\.com)\b/i.test(u);
+}
+
+function unescapeOg(s) {
+    return s.replace(/&amp;/g, '&').replace(/\\u0026/g, '&').replace(/&#x2F;/gi, '/').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+}
+
+// POST /api/facebook/fetch-post — extract media from a single FB URL.
+// CONSERVATIVE strategy: only emit items from sources we trust 100%.
+//   (a) yt-dlp — for video posts (single OR multi-video; we DON'T pass
+//       --no-playlist so multi-video posts give one JSON line per video).
+//   (b) og:image / og:video meta tags — single primary match each, for
+//       photo posts when yt-dlp finds nothing.
+// We deliberately do NOT scrape arbitrary `scontent.fbcdn.net` URLs from
+// the page HTML, because that picks up sidebar/comment/reaction noise
+// whose URLs return 404 when proxied — that was the "empty boxes" bug.
+// Tradeoff: multi-image albums currently surface only the cover photo
+// (the rest aren't reliably extractable without auth). Better one real
+// item than one real item plus a wall of broken thumbnails.
+app.post('/api/facebook/fetch-post', async (req, res) => {
+    const { url } = req.body;
+    if (!url || !url.trim()) {
+        return res.status(400).json({ error: 'URL is required' });
+    }
+    const fbUrl = url.trim();
+    if (!isFacebookUrl(fbUrl)) {
+        return res.status(400).json({ error: 'Please paste a Facebook URL (facebook.com, fb.watch, m.facebook.com).' });
+    }
+
+    console.log(`\n[Facebook] Post fetch: ${fbUrl}`);
+    const items = [];
+    let caption = '';
+    let username = '';
+
+    // Dedupe by URL basename (origin + path) since FB serves the same media
+    // at varying signed-query URLs over time.
+    const basenameOf = (u) => {
+        try { const x = new URL(u); return x.origin + x.pathname; }
+        catch { return (u || '').split('?')[0]; }
+    };
+    const seenBases = new Set();
+    const addItem = (item) => {
+        if (!item || !item.url) return;
+        const key = basenameOf(item.url);
+        if (seenBases.has(key)) return;
+        seenBases.add(key);
+        items.push(item);
+    };
+
+    // ─── Method 1: yt-dlp ─────────────────────────────────────────────
+    // We DON'T pass --no-playlist: for true multi-video posts FB returns
+    // one JSON line per video. For ordinary single-video posts yt-dlp
+    // still emits exactly one line. Either way, we never invent items.
+    try {
+        const stdout = await new Promise((resolve, reject) => {
+            const ytdlp = getYtDlpBinary();
+            execFile(ytdlp, [
+                '--dump-json',
+                '--no-download',
+                '--no-warnings',
+                fbUrl,
+            ], { maxBuffer: 1024 * 1024 * 20, timeout: 30000 }, (err, out, stderr) => {
+                if (err) return reject(new Error((stderr || err.message || '').split('\n').slice(0, 2).join(' | ')));
+                resolve(out);
+            });
+        });
+
+        for (const line of stdout.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('{')) continue;
+            try {
+                const info = JSON.parse(trimmed);
+                const formats = info.formats || [];
+                const progressive = formats
+                    .filter(f => f.url && f.vcodec !== 'none' && f.acodec !== 'none')
+                    .sort((a, b) => (b.height || 0) - (a.height || 0) || ((b.tbr || 0) - (a.tbr || 0)));
+                const bestProgressive = progressive.find(f => f.ext === 'mp4') || progressive[0];
+                const videoUrl = bestProgressive?.url || info.url;
+                if (!videoUrl) continue;
+                addItem({
+                    type: 'video',
+                    url: videoUrl,
+                    thumbnailUrl: info.thumbnail || info.thumbnails?.[info.thumbnails.length - 1]?.url || null,
+                });
+                if (!username) username = info.uploader || info.channel || info.uploader_id || '';
+                if (!caption)  caption  = info.description || info.title || '';
+            } catch { /* skip malformed JSON line */ }
+        }
+        if (items.length > 0) {
+            console.log(`[Facebook] ✓ yt-dlp got ${items.length} video(s)`);
+        }
+    } catch (err) {
+        console.log('[Facebook] yt-dlp did not produce a video:', err.message);
+    }
+
+    // ─── Method 2: HTML scrape — og:image/og:video + targeted multi-image
+    // extraction. We fetch the page once and pull TWO things from it:
+    //   (a) Primary og:image / og:video for the cover media
+    //   (b) Multi-image album members via FB's embedded GraphQL JSON:
+    //       "image":{"uri":"..."} entries filtered to content-photo CDN
+    //       buckets (t39.30808-6, t31.18172-8, t1.6435-9) only. This is
+    //       narrow enough to skip sidebar/avatar noise but catches every
+    //       album member that's actually in the post.
+    try {
+        const pageRes = await fetch(fbUrl, {
+            headers: {
+                // Crawler UA reliably returns the rich-preview meta block + embedded JSON
+                'User-Agent': FB_MBASIC_UA,
+                'Accept': 'text/html,application/xhtml+xml',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            redirect: 'follow',
+        });
+        console.log(`[Facebook] HTML scrape status: ${pageRes.status}`);
+
+        if (pageRes.ok) {
+            const html = await pageRes.text();
+            const og = (prop) => {
+                const re = new RegExp(`<meta\\s+(?:property|name)=["']${prop}["']\\s+content=["']([^"']+)["']`, 'i');
+                const rev = new RegExp(`<meta\\s+content=["']([^"']+)["']\\s+(?:property|name)=["']${prop}["']`, 'i');
+                const m = html.match(re) || html.match(rev);
+                return m ? unescapeOg(m[1]) : null;
+            };
+
+            const ogVideo = og('og:video:secure_url') || og('og:video:url') || og('og:video');
+            const ogImage = og('og:image:secure_url') || og('og:image:url') || og('og:image');
+            const ogTitle = og('og:title');
+            const ogDesc  = og('og:description');
+
+            // (a) Add cover image/video if yt-dlp didn't already cover it
+            if (items.length === 0) {
+                if (ogVideo) {
+                    addItem({ type: 'video', url: ogVideo, thumbnailUrl: ogImage || null });
+                    console.log('[Facebook] ✓ og:video');
+                } else if (ogImage) {
+                    addItem({ type: 'image', url: ogImage, thumbnailUrl: ogImage });
+                    console.log('[Facebook] ✓ og:image');
+                }
+            }
+
+            // (b) Multi-image album extraction — pull every "image":{"uri":"..."}
+            // entry that points to FB's CONTENT-PHOTO CDN buckets. JSON URIs
+            // are escape-encoded as "https:\/\/..." so we must decode \/ first.
+            const decodeJsonUrl = (s) => s
+                .replace(/\\u002F/gi, '/')
+                .replace(/\\\//g, '/')
+                .replace(/\\u0026/g, '&')
+                .replace(/&amp;/g, '&');
+            const imageRe = /"image"\s*:\s*\{\s*"uri"\s*:\s*"((?:[^"\\]|\\.)+)"/g;
+            let albumAdded = 0;
+            let im;
+            while ((im = imageRe.exec(html)) !== null) {
+                const url = decodeJsonUrl(im[1]);
+                // Only keep URLs from FB's content-photo buckets. The narrow
+                // bucket list (t39.30808-6, t31.18172-8, t1.6435-9) excludes
+                // profile pics (-1), reactions, avatars, and sidebar content.
+                if (!/\/t39\.30808-6\/|\/t31\.18172-8\/|\/t1\.6435-9\//.test(url)) continue;
+                // Skip if already added (dedupe by URL basename via addItem)
+                addItem({ type: 'image', url, thumbnailUrl: url });
+                albumAdded++;
+            }
+            if (albumAdded > 0) {
+                console.log(`[Facebook] ✓ multi-image extraction added ${albumAdded} photo candidate(s) (deduped to ${items.length} total)`);
+            }
+
+            if (!username) username = ogTitle || '';
+            if (!caption)  caption  = ogDesc || ogTitle || '';
+        }
+    } catch (err) {
+        console.log('[Facebook] HTML scrape error:', err.message);
+    }
+
+    if (items.length === 0) {
+        return res.status(404).json({
+            error: 'Could not extract media from this Facebook URL. The post may be private, deleted, or restricted to logged-in users.',
+        });
+    }
+
+    return res.json({ success: true, items, caption, username });
+});
+
+// Shared helper used by the profile-picture + story endpoints: parse the
+// rich-preview meta block off any FB URL and return the primary image/video.
+async function fetchFbOgMeta(fbUrl) {
+    const pageRes = await fetch(fbUrl, {
+        headers: {
+            // Crawler UA gets the og: rich preview reliably without auth
+            'User-Agent': FB_MBASIC_UA,
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+        redirect: 'follow',
+    });
+    if (!pageRes.ok) {
+        return { ok: false, status: pageRes.status };
+    }
+    const html = await pageRes.text();
+    const og = (prop) => {
+        const re = new RegExp(`<meta\\s+(?:property|name)=["']${prop}["']\\s+content=["']([^"']+)["']`, 'i');
+        const rev = new RegExp(`<meta\\s+content=["']([^"']+)["']\\s+(?:property|name)=["']${prop}["']`, 'i');
+        const m = html.match(re) || html.match(rev);
+        return m ? unescapeOg(m[1]) : null;
+    };
+    return {
+        ok: true,
+        html,
+        finalUrl: pageRes.url,
+        ogImage: og('og:image:secure_url') || og('og:image:url') || og('og:image'),
+        ogVideo: og('og:video:secure_url') || og('og:video:url') || og('og:video'),
+        ogTitle: og('og:title'),
+        ogDescription: og('og:description'),
+    };
+}
+
+// POST /api/facebook/fetch-profile-picture
+// Returns the highest-quality profile picture for a Facebook profile / Page.
+// FB serves og:image to the crawler UA without auth for almost every public
+// profile (personal users and Pages alike), so this is reliable.
+app.post('/api/facebook/fetch-profile-picture', async (req, res) => {
+    const { url } = req.body;
+    if (!url || !url.trim()) {
+        return res.status(400).json({ error: 'Profile URL or username is required' });
+    }
+    let raw = url.trim();
+
+    // Accept either a full URL or a bare username
+    if (!/facebook\.com|fb\.com/i.test(raw)) {
+        raw = `https://www.facebook.com/${raw.replace(/^@/, '')}`;
+    }
+    if (!isFacebookUrl(raw)) {
+        return res.status(400).json({ error: 'Please paste a Facebook profile URL or username.' });
+    }
+
+    const handleMatch = raw.match(/facebook\.com\/([^/?#]+)/i) || raw.match(/fb\.com\/([^/?#]+)/i);
+    const handle = handleMatch ? handleMatch[1] : 'profile';
+
+    console.log(`\n[Facebook] Profile-picture fetch: @${handle}`);
+
+    try {
+        const meta = await fetchFbOgMeta(`https://www.facebook.com/${encodeURIComponent(handle)}`);
+        if (!meta.ok) {
+            return res.status(meta.status || 502).json({
+                error: 'Facebook returned an error for this profile. The handle may be wrong or the profile may be deleted.',
+            });
+        }
+        if (!meta.ogImage) {
+            return res.status(404).json({
+                error: 'Could not find a profile picture for this profile. The profile may be private, deleted, or require login.',
+            });
+        }
+
+        console.log(`[Facebook] ✓ Profile picture for @${handle}`);
+        return res.json({
+            success: true,
+            items: [{ type: 'image', url: meta.ogImage, thumbnailUrl: meta.ogImage }],
+            username: handle,
+            caption: meta.ogTitle || handle,
+        });
+    } catch (err) {
+        console.error('[Facebook] Profile-picture fetch error:', err);
+        return res.status(500).json({ error: 'Server error: ' + err.message });
+    }
+});
+
+// POST /api/facebook/fetch-story
+// Tries to extract media from a Facebook story URL. Stories on FB usually
+// require authentication, so we attempt the og: scrape and return an honest
+// error if Facebook didn't serve the preview meta tags.
+app.post('/api/facebook/fetch-story', async (req, res) => {
+    const { url } = req.body;
+    if (!url || !url.trim()) {
+        return res.status(400).json({ error: 'Story URL is required' });
+    }
+    const storyUrl = url.trim();
+    if (!isFacebookUrl(storyUrl)) {
+        return res.status(400).json({ error: 'Please paste a Facebook story URL.' });
+    }
+
+    console.log(`\n[Facebook] Story fetch: ${storyUrl}`);
+
+    try {
+        const meta = await fetchFbOgMeta(storyUrl);
+        if (!meta.ok) {
+            return res.status(meta.status || 502).json({
+                error: 'Facebook refused this story URL. Stories typically require a logged-in session to view — there\'s no anonymous way to fetch them.',
+            });
+        }
+
+        const items = [];
+        if (meta.ogVideo) {
+            items.push({ type: 'video', url: meta.ogVideo, thumbnailUrl: meta.ogImage || null });
+        } else if (meta.ogImage) {
+            items.push({ type: 'image', url: meta.ogImage, thumbnailUrl: meta.ogImage });
+        }
+
+        if (items.length === 0) {
+            return res.status(404).json({
+                error: 'Facebook served the page but didn\'t expose any media in the link preview. Stories almost always require login to view — try downloading via the Post tab if you have a regular post URL.',
+            });
+        }
+
+        console.log(`[Facebook] ✓ Story media`);
+        return res.json({
+            success: true,
+            items,
+            username: meta.ogTitle || '',
+            caption: meta.ogDescription || '',
+        });
+    } catch (err) {
+        console.error('[Facebook] Story fetch error:', err);
+        return res.status(500).json({ error: 'Server error: ' + err.message });
+    }
+});
 
 // SPA fallback
 app.get('*', (req, res) => {

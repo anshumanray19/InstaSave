@@ -164,6 +164,30 @@
                     </button>
                 </div>
 
+                <!-- Facebook Downloader Card -->
+                <div class="downloader-card glass-card brand-facebook" onclick="openDownloader('facebook')">
+                    <div class="downloader-card-header">
+                        <div class="downloader-card-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                                <path d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.78l-.44 2.89h-2.34v6.99A10 10 0 0 0 22 12z" />
+                            </svg>
+                        </div>
+                        <span class="status-badge active">
+                            <span class="status-dot"></span>
+                            Active
+                        </span>
+                    </div>
+                    <h3 class="downloader-card-title">Facebook Downloader</h3>
+                    <p class="downloader-card-desc">Save public posts, reels, videos, and photos. Paste a post URL or fetch a profile's recent posts.</p>
+                    <button class="downloader-card-btn">
+                        Launch Downloader
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                    </button>
+                </div>
+
                 <!-- Snapchat Downloader Card -->
                 <div class="downloader-card glass-card brand-snapchat" onclick="openDownloader('snapchat')">
                     <div class="downloader-card-header">
@@ -352,7 +376,7 @@
                     </button>
                 </div>
                 <div class="input-hint">
-                    Works with public profiles only · Shows 25 posts per page
+                    Works with public profiles only · Shows 30 posts per page
                 </div>
             </section>
 
@@ -719,6 +743,209 @@
                     <div class="yt-format-list" id="ytFormats-audio"></div>
                 </div>
             </section>
+        </div>
+
+        <!-- ═══════════ TAB 7: Facebook Downloader ═══════════ -->
+        <div class="tab-content" id="tab-facebook">
+            <section class="hero">
+                <h1 class="hero-title">
+                    <span class="hero-emoji">📘</span>
+                    Facebook Downloader
+                </h1>
+                <p class="hero-subtitle">Download public posts, reels, videos, and photos — no login required</p>
+            </section>
+
+            <!-- Mode switcher: Post vs Profile -->
+            <div class="fb-mode-switcher">
+                <button class="fb-mode-btn active" data-fbmode="post" onclick="switchFbMode('post')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                    Post / Reel
+                </button>
+                <button class="fb-mode-btn" data-fbmode="story" onclick="switchFbMode('story')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <circle cx="12" cy="12" r="10" />
+                        <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
+                    </svg>
+                    Story
+                </button>
+                <button class="fb-mode-btn" data-fbmode="pfp" onclick="switchFbMode('pfp')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <circle cx="12" cy="8" r="4" />
+                        <path d="M4 21v-1a8 8 0 0 1 16 0v1" />
+                    </svg>
+                    Profile Picture
+                </button>
+            </div>
+
+            <!-- POST MODE -->
+            <div class="fb-mode-panel active" id="fbPanel-post">
+                <section class="input-card glass-card">
+                    <div class="input-wrapper">
+                        <div class="input-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                            </svg>
+                        </div>
+                        <input type="url" id="fbPostUrlInput" class="url-input"
+                            placeholder="Paste Facebook post, reel, video, or photo URL..." autocomplete="off" spellcheck="false">
+                        <button class="btn-fetch" onclick="fetchFacebookPost()">
+                            <svg class="btn-fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            <span class="btn-fetch-text">Fetch</span>
+                        </button>
+                    </div>
+                    <div class="input-hint">
+                        Supports: facebook.com/watch · facebook.com/reel · facebook.com/{user}/videos · facebook.com/{user}/posts · fb.watch
+                    </div>
+                </section>
+
+                <section class="loading-section" id="fbPostLoadingSection">
+                    <div class="loader">
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                    </div>
+                    <p class="loading-text">Fetching media from Facebook...</p>
+                </section>
+
+                <section class="error-section glass-card" id="fbPostErrorSection">
+                    <div class="error-icon">⚠️</div>
+                    <p class="error-text" id="fbPostErrorText"></p>
+                    <button class="btn-retry" onclick="clearFbPostError()">Try Again</button>
+                </section>
+
+                <section class="media-results glass-card" id="fbPostResultsSection">
+                    <div class="media-results-header">
+                        <div class="media-results-user">
+                            <span class="media-results-username" id="fbPostUsername">Facebook</span>
+                            <span class="media-results-count" id="fbPostMediaCount">0 items</span>
+                        </div>
+                        <button class="btn-download-all" onclick="downloadAllFbPostMedia()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            Download All
+                        </button>
+                    </div>
+                    <div class="media-grid" id="fbPostMediaGrid"></div>
+                    <div class="media-caption" id="fbPostCaption"></div>
+                </section>
+            </div>
+
+            <!-- STORY MODE -->
+            <div class="fb-mode-panel" id="fbPanel-story">
+                <section class="input-card glass-card">
+                    <div class="input-wrapper">
+                        <div class="input-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <circle cx="12" cy="12" r="10" />
+                                <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
+                            </svg>
+                        </div>
+                        <input type="url" id="fbStoryUrlInput" class="url-input"
+                            placeholder="Paste Facebook story URL..." autocomplete="off" spellcheck="false">
+                        <button class="btn-fetch" onclick="fetchFacebookStory()">
+                            <svg class="btn-fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            <span class="btn-fetch-text">Fetch</span>
+                        </button>
+                    </div>
+                    <div class="input-hint">
+                        Facebook stories usually require login. We'll try anyway — public previews sometimes work.
+                    </div>
+                </section>
+
+                <section class="loading-section" id="fbStoryLoadingSection">
+                    <div class="loader">
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                    </div>
+                    <p class="loading-text">Fetching story from Facebook...</p>
+                </section>
+
+                <section class="error-section glass-card" id="fbStoryErrorSection">
+                    <div class="error-icon">⚠️</div>
+                    <p class="error-text" id="fbStoryErrorText"></p>
+                    <button class="btn-retry" onclick="clearFbStoryError()">Try Again</button>
+                </section>
+
+                <section class="media-results glass-card" id="fbStoryResultsSection">
+                    <div class="media-results-header">
+                        <div class="media-results-user">
+                            <span class="media-results-username" id="fbStoryUsername">Facebook Story</span>
+                            <span class="media-results-count" id="fbStoryMediaCount">0 items</span>
+                        </div>
+                    </div>
+                    <div class="media-grid" id="fbStoryMediaGrid"></div>
+                    <div class="media-caption" id="fbStoryCaption"></div>
+                </section>
+            </div>
+
+            <!-- PROFILE PICTURE MODE -->
+            <div class="fb-mode-panel" id="fbPanel-pfp">
+                <section class="input-card glass-card">
+                    <div class="input-wrapper">
+                        <div class="input-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <circle cx="12" cy="8" r="4" />
+                                <path d="M4 21v-1a8 8 0 0 1 16 0v1" />
+                            </svg>
+                        </div>
+                        <input type="text" id="fbPfpUrlInput" class="url-input"
+                            placeholder="Paste profile URL or just a username..." autocomplete="off" spellcheck="false">
+                        <button class="btn-fetch" onclick="fetchFacebookProfilePicture()">
+                            <svg class="btn-fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            <span class="btn-fetch-text">Fetch</span>
+                        </button>
+                    </div>
+                    <div class="input-hint">
+                        Works for public profiles AND Pages. Paste a full URL (facebook.com/zuck) or just a username (zuck).
+                    </div>
+                </section>
+
+                <section class="loading-section" id="fbPfpLoadingSection">
+                    <div class="loader">
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                    </div>
+                    <p class="loading-text">Fetching profile picture...</p>
+                </section>
+
+                <section class="error-section glass-card" id="fbPfpErrorSection">
+                    <div class="error-icon">⚠️</div>
+                    <p class="error-text" id="fbPfpErrorText"></p>
+                    <button class="btn-retry" onclick="clearFbPfpError()">Try Again</button>
+                </section>
+
+                <section class="media-results glass-card" id="fbPfpResultsSection">
+                    <div class="media-results-header">
+                        <div class="media-results-user">
+                            <span class="media-results-username" id="fbPfpUsername">@profile</span>
+                            <span class="media-results-count">Profile picture</span>
+                        </div>
+                    </div>
+                    <div class="media-grid" id="fbPfpMediaGrid"></div>
+                </section>
+            </div>
         </div>
 
         <!-- ═══════════ TAB 5: How It Works ═══════════ -->
