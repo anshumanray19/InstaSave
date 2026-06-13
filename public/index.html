@@ -1034,77 +1034,165 @@
 
         <!-- ═══════════ TAB 5: How It Works ═══════════ -->
         <div class="tab-content" id="tab-howto">
-            <section class="hero">
+            <section class="hero howto-hero">
+                <span class="howto-eyebrow">Guide</span>
                 <h1 class="hero-title">
-                    <span class="hero-emoji">❓</span>
-                    How It Works
+                    How <span class="grad-text">OmniSave</span> Works
                 </h1>
-                <p class="hero-subtitle">Everything you need to know about using InstaSave</p>
+                <p class="hero-subtitle">One downloader for Instagram, YouTube, Facebook &amp; Snapchat. Paste a link, preview the media, and save it in the best available quality.</p>
             </section>
 
-            <div class="howto-grid">
-                <div class="howto-card glass-card">
-                    <div class="howto-card-icon">📷</div>
-                    <h3 class="howto-card-title">Media Downloader</h3>
-                    <p class="howto-card-desc">Download photos and videos from any <strong>public</strong> Instagram
-                        post. Simply paste the post URL and click Fetch. If the post has multiple items (carousel), all
-                        images and videos will be shown.</p>
-                    <div class="howto-card-tag">No login needed</div>
+            <!-- 3-step quick flow -->
+            <div class="steps-row">
+                <div class="step-card glass-card">
+                    <div class="step-num">1</div>
+                    <div class="step-body">
+                        <h4>Copy the link</h4>
+                        <p>Grab any public post, reel, video, story, or profile URL from the app or browser.</p>
+                    </div>
                 </div>
-
-                <div class="howto-card glass-card">
-                    <div class="howto-card-icon">📦</div>
-                    <h3 class="howto-card-title">Bulk Downloader</h3>
-                    <p class="howto-card-desc">Browse a public profile's entire feed. Paste the profile URL to see up to
-                        25 posts per page. Select the ones you want and download them all at once.</p>
-                    <div class="howto-card-tag">Public profiles only</div>
+                <div class="step-connector"></div>
+                <div class="step-card glass-card">
+                    <div class="step-num">2</div>
+                    <div class="step-body">
+                        <h4>Paste &amp; fetch</h4>
+                        <p>Drop it into the matching downloader and hit Fetch. We pull every media item.</p>
+                    </div>
                 </div>
-
-                <div class="howto-card glass-card">
-                    <div class="howto-card-icon">🔐</div>
-                    <h3 class="howto-card-title">Private & Exclusive Content</h3>
-                    <p class="howto-card-desc">View and download videos from <strong>private accounts you
-                            follow</strong>. This requires your Instagram session cookie (sessionid). Click the Login
-                        button in the top right to connect.</p>
-                    <div class="howto-card-tag">Session ID required</div>
-                </div>
-
-                <div class="howto-card glass-card">
-                    <div class="howto-card-icon">📖</div>
-                    <h3 class="howto-card-title">Story Downloader</h3>
-                    <p class="howto-card-desc">Download Instagram stories before they disappear. This feature is coming
-                        soon and will support both public and followed account stories.</p>
-                    <div class="howto-card-tag">Coming soon</div>
+                <div class="step-connector"></div>
+                <div class="step-card glass-card">
+                    <div class="step-num">3</div>
+                    <div class="step-body">
+                        <h4>Preview &amp; save</h4>
+                        <p>View each item, then download individually or grab them all at once.</p>
+                    </div>
                 </div>
             </div>
 
-            <div class="howto-faq glass-card">
-                <h3 class="howto-faq-title">Frequently Asked Questions</h3>
+            <!-- Per-platform capability sections -->
+            <h2 class="howto-section-heading">Supported platforms</h2>
+            <div class="platform-howto-grid">
 
-                <div class="faq-item">
-                    <h4 class="faq-q">How do I get my Instagram sessionid?</h4>
-                    <p class="faq-a">Open Instagram in your browser → press F12 → go to Application tab → Cookies →
-                        instagram.com → find "sessionid" and copy its value.</p>
+                <!-- Instagram -->
+                <div class="platform-howto glass-card" data-brand="instagram">
+                    <div class="platform-howto-head">
+                        <div class="platform-howto-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+                                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                                <circle cx="12" cy="12" r="5" />
+                                <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="platform-howto-title">Instagram</h3>
+                            <span class="platform-howto-sub">Reels · Posts · Carousels · Stories · Bulk</span>
+                        </div>
+                        <button class="platform-howto-launch" onclick="openDownloader('instagram')">Open</button>
+                    </div>
+                    <ul class="feature-list">
+                        <li><span class="feat-dot"></span><strong>Media Downloader</strong> — any public reel, post, or carousel. Multi-item posts return every photo &amp; video.</li>
+                        <li><span class="feat-dot"></span><strong>Bulk Downloader</strong> — load a public profile's feed and select multiple posts to download at once.</li>
+                        <li><span class="feat-dot"></span><strong>Private &amp; Exclusive</strong> — content from private accounts you follow, using your session ID.</li>
+                        <li><span class="feat-dot"></span><strong>Story Downloader</strong> — grab active stories &amp; highlights before they vanish.</li>
+                    </ul>
+                    <div class="platform-howto-note">Public content needs no login. Private accounts &amp; stories require your <code>sessionid</code>.</div>
                 </div>
 
-                <div class="faq-item">
-                    <h4 class="faq-q">Is my session safe?</h4>
-                    <p class="faq-a">Yes! Your session cookie is stored only in the server's temporary memory (RAM) and
-                        is automatically cleared when the server restarts. It is never saved to disk or shared with
-                        anyone.</p>
+                <!-- YouTube -->
+                <div class="platform-howto glass-card" data-brand="youtube">
+                    <div class="platform-howto-head">
+                        <div class="platform-howto-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+                                <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
+                                <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="currentColor" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="platform-howto-title">YouTube</h3>
+                            <span class="platform-howto-sub">Videos · Shorts · Audio (MP3)</span>
+                        </div>
+                        <button class="platform-howto-launch" onclick="openDownloader('youtube')">Open</button>
+                    </div>
+                    <ul class="feature-list">
+                        <li><span class="feat-dot"></span><strong>Every resolution</strong> — from 360p up to 1080p, 1440p &amp; 4K, each delivered with audio merged in.</li>
+                        <li><span class="feat-dot"></span><strong>Audio only</strong> — extract high-quality MP3 / M4A from any video.</li>
+                        <li><span class="feat-dot"></span><strong>Live progress</strong> — watch real-time download &amp; merge progress while large files prepare.</li>
+                    </ul>
+                    <div class="platform-howto-note">High-resolution streams are merged server-side with ffmpeg so video + audio always stay in sync.</div>
                 </div>
 
-                <div class="faq-item">
-                    <h4 class="faq-q">Why can't I download from private profiles?</h4>
-                    <p class="faq-a">Private profile content requires authentication. Use the "Private & Exclusive" tab
-                        with your session ID to access content from private accounts you follow.</p>
+                <!-- Facebook -->
+                <div class="platform-howto glass-card" data-brand="facebook">
+                    <div class="platform-howto-head">
+                        <div class="platform-howto-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                                <path d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.78l-.44 2.89h-2.34v6.99A10 10 0 0 0 22 12z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="platform-howto-title">Facebook</h3>
+                            <span class="platform-howto-sub">Posts · Reels · Videos · Profile pics</span>
+                        </div>
+                        <button class="platform-howto-launch" onclick="openDownloader('facebook')">Open</button>
+                    </div>
+                    <ul class="feature-list">
+                        <li><span class="feat-dot"></span><strong>Post / Reel</strong> — download public videos, reels, and photos in full quality.</li>
+                        <li><span class="feat-dot"></span><strong>Profile Picture</strong> — grab the high-resolution profile picture of any public profile or Page.</li>
+                        <li><span class="feat-dot"></span><strong>Story</strong> — best-effort story preview download when publicly shared.</li>
+                    </ul>
+                    <div class="platform-howto-note">Works for public content. Personal-profile feeds &amp; private stories are gated by Facebook's login.</div>
                 </div>
 
-                <div class="faq-item">
-                    <h4 class="faq-q">What formats are supported?</h4>
-                    <p class="faq-a">Videos are downloaded in MP4 format, and images in their original format (usually
-                        JPEG). We always fetch the highest quality available.</p>
+                <!-- Snapchat -->
+                <div class="platform-howto glass-card" data-brand="snapchat">
+                    <div class="platform-howto-head">
+                        <div class="platform-howto-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+                                <path d="M12 2a5 5 0 0 0-5 5c0 2 1.5 3.5 1.5 3.5S8 11.5 7.5 12s-1.5 0-1.5.5.5 1 1 1 2-.5 2-.5 1 1.5 3 1.5 3-1.5 3-1.5 1.5.5 2 .5 1-.5 1-1-.5-.5-1-.5-1-.5-1-.5 1.5-1.5 1.5-3.5a5 5 0 0 0-5-5z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="platform-howto-title">Snapchat</h3>
+                            <span class="platform-howto-sub">Stories · Highlights · Spotlight</span>
+                        </div>
+                        <button class="platform-howto-launch" onclick="openDownloader('snapchat')">Open</button>
+                    </div>
+                    <ul class="feature-list">
+                        <li><span class="feat-dot"></span><strong>Public stories</strong> — paste a <code>snapchat.com/@username</code> link to save their active story snaps.</li>
+                        <li><span class="feat-dot"></span><strong>Highlights</strong> — download saved highlight reels from public profiles.</li>
+                        <li><span class="feat-dot"></span><strong>Spotlight</strong> — save any Spotlight video without a watermark.</li>
+                    </ul>
+                    <div class="platform-howto-note">No login required — Snapchat serves public stories, highlights &amp; Spotlight openly.</div>
                 </div>
+            </div>
+
+            <!-- FAQ -->
+            <h2 class="howto-section-heading">Frequently asked questions</h2>
+            <div class="faq-accordion">
+                <details class="faq-row glass-card">
+                    <summary>Do I need to create an account or log in?</summary>
+                    <p>No. Public content on all four platforms downloads without any login. Only Instagram private accounts and stories need your Instagram <code>sessionid</code>.</p>
+                </details>
+                <details class="faq-row glass-card">
+                    <summary>How do I get my Instagram sessionid?</summary>
+                    <p>Open Instagram in your browser → press F12 → Application tab → Cookies → instagram.com → find <code>sessionid</code> and copy its value into the Login dialog.</p>
+                </details>
+                <details class="faq-row glass-card">
+                    <summary>Is my session safe?</summary>
+                    <p>Yes. Your session cookie lives only in the server's temporary memory (RAM) and is cleared on restart. It is never written to disk or shared.</p>
+                </details>
+                <details class="faq-row glass-card">
+                    <summary>What quality and formats do I get?</summary>
+                    <p>Videos download as MP4 (YouTube high-res may be MKV/WebM after merge), images in their original format, and audio as MP3/M4A. We always fetch the highest quality available.</p>
+                </details>
+                <details class="faq-row glass-card">
+                    <summary>Why does a multi-photo post sometimes show fewer images?</summary>
+                    <p>Some platforms (notably Facebook) only expose the cover image to anonymous requests; the rest sit behind a login. Instagram carousels return every item.</p>
+                </details>
+                <details class="faq-row glass-card">
+                    <summary>Can I download from private or deleted content?</summary>
+                    <p>Only Instagram private accounts you follow (with your session ID). Deleted, expired, or fully private content on any platform can't be retrieved.</p>
+                </details>
             </div>
         </div>
 
@@ -1113,28 +1201,56 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-inner">
-            <div class="footer-top">
-                <div class="footer-brand">
-                    <svg class="footer-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        width="24" height="24">
-                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-                        <circle cx="12" cy="12" r="5" />
-                        <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
-                    </svg>
-                    <span>InstaSave <span class="app-version">v1.0.1</span></span>
+            <div class="footer-cols">
+                <!-- Brand column -->
+                <div class="footer-col footer-col-brand">
+                    <div class="footer-brand">
+                        <svg class="footer-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+                            <path d="M12 15V3m0 12l-4-4m4 4l4-4" />
+                            <path d="M20.3 10.5A9 9 0 1 1 12 3" />
+                        </svg>
+                        <span>OmniSave <span class="app-version">v1.0.1</span></span>
+                    </div>
+                    <p class="footer-tagline">The all-in-one downloader for Instagram, YouTube, Facebook &amp; Snapchat. Fast, private, and free.</p>
+                    <div class="footer-platform-dots">
+                        <span class="fp-dot" style="--c:var(--brand-instagram)" title="Instagram"></span>
+                        <span class="fp-dot" style="--c:var(--brand-youtube)" title="YouTube"></span>
+                        <span class="fp-dot" style="--c:var(--brand-facebook)" title="Facebook"></span>
+                        <span class="fp-dot" style="--c:#f5d800" title="Snapchat"></span>
+                    </div>
                 </div>
-                <div class="footer-links">
-                    <a href="#" onclick="switchTab('howto'); return false;">How It Works</a>
-                    <!-- <a href="https://github.com/anshumanray19/InstaSave" target="_blank" rel="noopener">GitHub Repo</a> -->
+
+                <!-- Platforms column -->
+                <div class="footer-col">
+                    <h4 class="footer-col-title">Downloaders</h4>
+                    <a class="footer-link" href="#" onclick="openDownloader('instagram'); return false;">Instagram</a>
+                    <a class="footer-link" href="#" onclick="openDownloader('youtube'); return false;">YouTube</a>
+                    <a class="footer-link" href="#" onclick="openDownloader('facebook'); return false;">Facebook</a>
+                    <a class="footer-link" href="#" onclick="openDownloader('snapchat'); return false;">Snapchat</a>
+                </div>
+
+                <!-- Resources column -->
+                <div class="footer-col">
+                    <h4 class="footer-col-title">Resources</h4>
+                    <a class="footer-link" href="#" onclick="showHowItWorks(); return false;">How It Works</a>
+                    <a class="footer-link" href="#" onclick="showHowItWorks(); return false;">FAQ</a>
+                    <a class="footer-link" href="#" onclick="showHomepage(); return false;">All Platforms</a>
+                </div>
+
+                <!-- Legal column -->
+                <div class="footer-col">
+                    <h4 class="footer-col-title">About</h4>
+                    <span class="footer-link footer-link-static">Personal &amp; educational use</span>
+                    <span class="footer-link footer-link-static">No data stored</span>
+                    <span class="footer-link footer-link-static">Open &amp; ad-free</span>
                 </div>
             </div>
 
             <div class="footer-divider"></div>
 
             <div class="footer-bottom">
-                <p class="footer-disclaimer">This tool is for personal and educational use only. Not affiliated with
-                    Instagram or Meta Platforms, Inc.</p>
-                <p class="footer-love">Made with ❤️ for the community. Designed with a premium touch.</p>
+                <p class="footer-disclaimer">For personal &amp; educational use only. Not affiliated with Instagram, YouTube, Meta, or Snap Inc. All trademarks belong to their respective owners.</p>
+                <p class="footer-love">© <span id="footerYear">2026</span> OmniSave · Made with ❤️ for the community</p>
             </div>
         </div>
     </footer>

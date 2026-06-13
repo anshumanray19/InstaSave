@@ -98,6 +98,35 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('ytUrlInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') fetchYouTubeInfo();
     });
+
+    // Enter key for Snapchat tab
+    document.getElementById('snapUrlInput')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') fetchSnapchat();
+    });
+
+    // Enter key for Facebook tabs
+    document.getElementById('fbPostUrlInput')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') fetchFacebookPost();
+    });
+    document.getElementById('fbStoryUrlInput')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') fetchFacebookStory();
+    });
+    document.getElementById('fbPfpUrlInput')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') fetchFacebookProfilePicture();
+    });
+
+    // Footer year
+    const yearEl = document.getElementById('footerYear');
+    if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+    // Deep links: #how-it-works opens the guide, #instagram etc. open a downloader
+    const routeFromHash = () => {
+        const h = (location.hash || '').replace('#', '').toLowerCase();
+        if (h === 'how-it-works') showHowItWorks();
+        else if (['instagram', 'youtube', 'facebook', 'snapchat'].includes(h)) openDownloader(h);
+    };
+    routeFromHash();
+    window.addEventListener('hashchange', routeFromHash);
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -2004,6 +2033,25 @@ function showHomepage() {
         target.offsetHeight; // force reflow
         target.style.animation = '';
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Open the global "How It Works" page from anywhere (footer, homepage, etc.)
+function showHowItWorks() {
+    // It's a standalone page now — hide the Instagram-only sub nav & session UI
+    document.getElementById('tabNav').style.display = 'none';
+    document.getElementById('sessionBadge').style.display = 'none';
+    document.getElementById('btnSession').style.display = 'none';
+
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const target = document.getElementById('tab-howto');
+    if (target) {
+        target.classList.add('active');
+        target.style.animation = 'none';
+        target.offsetHeight; // force reflow
+        target.style.animation = '';
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function openDownloader(platform) {
