@@ -3348,4 +3348,48 @@ a.footer-link:hover {
     .bulk-preview-caption {
         max-width: 180px;
     }
-}
+}
+
+/* ─── Back Button ─── */
+.back-btn-container {
+    display: flex;
+    justify-content: flex-start;
+    margin-bottom: 20px;
+    animation: fadeInUp 0.8s ease-out;
+}
+
+.btn-back {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: 1px solid var(--glass-border);
+    border-radius: 100px;
+    background: var(--glass-bg);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: var(--glass-shadow);
+    transition: var(--transition-fast);
+}
+
+.btn-back:hover {
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(-4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.btn-back svg {
+    transition: transform var(--transition-fast);
+}
+
+.btn-back:hover svg {
+    transform: translateX(-2px);
+}
+
