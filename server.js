@@ -2330,6 +2330,160 @@ app.post('/api/facebook/fetch-story', async (req, res) => {
     }
 });
 
+// ─── SNAPCHAT DOWNLOADER ──────────────────────────────────────────────
+// Snapchat's web pages are server-side-rendered with Next.js and embed all
+// the data we need inside <script id="__NEXT_DATA__">. We parse that JSON and
+// pull media from whichever shape the URL produced:
+//   • Spotlight video  → props.pageProps.videoMetadata.contentUrl
+//   • Public story      → props.pageProps.story.snapList[]
+//   • Highlight/saved   → props.pageProps.story.snapList[] (loaded into the
+//                         story slot) or matched within curatedHighlights
+// snapMediaType: 0 = image, 1 = video, 2 = video (no audio).
+const SNAP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+function isSnapchatUrl(u) {
+    return /(?:^|\/\/)(?:www\.|story\.|t\.)?snapchat\.com\//i.test(u) || /(?:^|\/\/)t\.snapchat\.com\//i.test(u);
+}
+
+// Some Snapchat fields are wrapped as { value: "..." } — unwrap to a plain string
+function snapText(v) {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'object' && typeof v.value === 'string') return v.value;
+    return '';
+}
+
+// Map a single Snapchat "snap" object to our normalized media item
+function snapToItem(snap) {
+    if (!snap || !snap.snapUrls || !snap.snapUrls.mediaUrl) return null;
+    const isVideo = snap.snapMediaType === 1 || snap.snapMediaType === 2;
+    const thumb = snap.snapUrls.mediaPreviewUrl?.value || null;
+    return {
+        type: isVideo ? 'video' : 'image',
+        url: snap.snapUrls.mediaUrl,
+        thumbnailUrl: thumb,
+        timestamp: snap.timestampInSec || null,
+    };
+}
+
+app.post('/api/snapchat/fetch', async (req, res) => {
+    const { url } = req.body;
+    if (!url || !url.trim()) {
+        return res.status(400).json({ error: 'URL is required' });
+    }
+    const snapUrl = url.trim();
+    if (!isSnapchatUrl(snapUrl)) {
+        return res.status(400).json({ error: 'Please paste a Snapchat URL (snapchat.com profile, story, highlight, or spotlight link).' });
+    }
+
+    console.log(`\n[Snapchat] Fetch: ${snapUrl}`);
+
+    try {
+        const pageRes = await fetch(snapUrl, {
+            headers: {
+                'User-Agent': SNAP_UA,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            redirect: 'follow',
+        });
+        console.log(`[Snapchat] HTTP ${pageRes.status} (final: ${pageRes.url})`);
+
+        if (!pageRes.ok) {
+            return res.status(pageRes.status === 404 ? 404 : 502).json({
+                error: pageRes.status === 404
+                    ? 'Snapchat returned 404 — the profile/story/spotlight doesn\'t exist or the link is wrong.'
+                    : `Snapchat returned an error (HTTP ${pageRes.status}). Try again in a moment.`,
+            });
+        }
+
+        const html = await pageRes.text();
+        const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+        if (!m) {
+            return res.status(404).json({ error: 'Could not read Snapchat page data. The link format may be unsupported.' });
+        }
+
+        let data;
+        try { data = JSON.parse(m[1]); }
+        catch { return res.status(500).json({ error: 'Failed to parse Snapchat page data.' }); }
+
+        const pp = data?.props?.pageProps;
+        if (!pp) {
+            return res.status(404).json({ error: 'Snapchat page contained no media data.' });
+        }
+
+        let items = [];
+        let username = '';
+        let title = '';
+        let kind = '';
+
+        // ─── Case 1: Spotlight (single video) ───────────────────────────
+        if (pp.videoMetadata && pp.videoMetadata.contentUrl) {
+            const vm = pp.videoMetadata;
+            items.push({
+                type: 'video',
+                url: vm.contentUrl,
+                thumbnailUrl: vm.thumbnailUrl || null,
+            });
+            username = snapText(vm.creator?.personCreator?.username);
+            title = snapText(vm.description) || snapText(vm.name) || '';
+            kind = 'spotlight';
+            console.log(`[Snapchat] ✓ Spotlight video (@${username})`);
+        }
+
+        // Display name / handle lives under userProfile.publicProfileInfo
+        const profileUsername = snapText(pp.userProfile?.publicProfileInfo?.username);
+        const profileTitle = snapText(pp.userProfile?.publicProfileInfo?.title);
+
+        // ─── Case 2: Public story / highlight (snapList) ────────────────
+        if (items.length === 0 && pp.story && Array.isArray(pp.story.snapList) && pp.story.snapList.length > 0) {
+            items = pp.story.snapList.map(snapToItem).filter(Boolean);
+            username = profileUsername;
+            title = snapText(pp.story.storyTitle) || profileTitle || '';
+            kind = 'story';
+            console.log(`[Snapchat] ✓ Story: ${items.length} snaps (@${username})`);
+        }
+
+        // ─── Case 3: A specific highlight when the link targets one ─────
+        // Some highlight links load the highlight directly into a highlight
+        // object rather than the story slot. Match by the URL suffix/id, else
+        // fall back to the first available highlight.
+        if (items.length === 0) {
+            const allHighlights = []
+                .concat(Array.isArray(pp.curatedHighlights) ? pp.curatedHighlights : [])
+                .concat(Array.isArray(pp.spotlightHighlights) ? pp.spotlightHighlights : []);
+            if (allHighlights.length > 0) {
+                // Try to match the highlight referenced by the URL
+                const lowerUrl = snapUrl.toLowerCase();
+                let target = allHighlights.find(h =>
+                    (h.canonicalUrlSuffix && lowerUrl.includes(String(h.canonicalUrlSuffix).toLowerCase())) ||
+                    (h.storyShareId && lowerUrl.includes(String(h.storyShareId).toLowerCase())) ||
+                    (h.highlightId && lowerUrl.includes(String(h.highlightId).toLowerCase()))
+                );
+                if (!target) target = allHighlights[0];
+                if (target && Array.isArray(target.snapList)) {
+                    items = target.snapList.map(snapToItem).filter(Boolean);
+                    username = profileUsername;
+                    title = snapText(target.storyTitle);
+                    kind = 'highlight';
+                    console.log(`[Snapchat] ✓ Highlight "${title}": ${items.length} snaps`);
+                }
+            }
+        }
+
+        if (items.length === 0) {
+            return res.status(404).json({
+                error: 'No downloadable media found. If this is a profile, the user may have no active story right now. Highlights and Spotlight links always work.',
+            });
+        }
+
+        return res.json({ success: true, items, username, title, kind });
+    } catch (err) {
+        console.error('[Snapchat] Error:', err);
+        return res.status(500).json({ error: 'Server error: ' + err.message });
+    }
+});
+
 // SPA fallback
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));

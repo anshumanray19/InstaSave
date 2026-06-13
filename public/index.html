@@ -197,14 +197,20 @@
                                 <path d="M12 17c-2 0-4.5-1-4.5-2.5 0-.5.5-.5.5-.5s.5.5 1.5.5 2.5-.5 2.5-.5 1.5.5 2.5.5 1.5-.5 1.5-.5.5 0 .5.5c0 1.5-2.5 2.5-4.5 2.5z" />
                             </svg>
                         </div>
-                        <span class="status-badge coming-soon">
+                        <span class="status-badge active">
                             <span class="status-dot"></span>
-                            Coming Soon
+                            Active
                         </span>
                     </div>
                     <h3 class="downloader-card-title">Snapchat Downloader</h3>
-                    <p class="downloader-card-desc">Save public stories, spotlights, and snaps directly to your device.</p>
-                    <button class="downloader-card-btn">Learn More</button>
+                    <p class="downloader-card-desc">Save public stories, highlights, and Spotlight videos directly to your device.</p>
+                    <button class="downloader-card-btn">
+                        Launch Downloader
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                    </button>
                 </div>
 
                 <!-- Twitter/X Downloader Card -->
@@ -955,6 +961,75 @@
                     <div class="media-grid" id="fbPfpMediaGrid"></div>
                 </section>
             </div>
+        </div>
+
+        <!-- ═══════════ TAB 8: Snapchat Downloader ═══════════ -->
+        <div class="tab-content" id="tab-snapchat">
+            <section class="hero">
+                <h1 class="hero-title">
+                    <span class="hero-emoji">👻</span>
+                    Snapchat Downloader
+                </h1>
+                <p class="hero-subtitle">Download public stories, highlights, and Spotlight videos — no login required</p>
+            </section>
+
+            <section class="input-card glass-card">
+                <div class="input-wrapper">
+                    <div class="input-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                        </svg>
+                    </div>
+                    <input type="url" id="snapUrlInput" class="url-input"
+                        placeholder="Paste Snapchat profile, story, highlight, or Spotlight URL..." autocomplete="off" spellcheck="false">
+                    <button class="btn-fetch" onclick="fetchSnapchat()">
+                        <svg class="btn-fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        <span class="btn-fetch-text">Fetch</span>
+                    </button>
+                </div>
+                <div class="input-hint">
+                    Supports: snapchat.com/@username (story) · /@user/spotlight/... · highlight share links · t.snapchat.com
+                </div>
+            </section>
+
+            <section class="loading-section" id="snapLoadingSection">
+                <div class="loader">
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                </div>
+                <p class="loading-text">Fetching media from Snapchat...</p>
+            </section>
+
+            <section class="error-section glass-card" id="snapErrorSection">
+                <div class="error-icon">⚠️</div>
+                <p class="error-text" id="snapErrorText"></p>
+                <button class="btn-retry" onclick="clearSnapError()">Try Again</button>
+            </section>
+
+            <section class="media-results glass-card" id="snapResultsSection">
+                <div class="media-results-header">
+                    <div class="media-results-user">
+                        <span class="media-results-username" id="snapUsername">Snapchat</span>
+                        <span class="media-results-count" id="snapMediaCount">0 items</span>
+                    </div>
+                    <button class="btn-download-all" onclick="downloadAllSnapMedia()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Download All
+                    </button>
+                </div>
+                <div class="media-grid" id="snapMediaGrid"></div>
+                <div class="media-caption" id="snapCaption"></div>
+            </section>
         </div>
 
         <!-- ═══════════ TAB 5: How It Works ═══════════ -->

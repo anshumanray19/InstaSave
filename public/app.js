@@ -2047,6 +2047,20 @@ function openDownloader(platform) {
             fbTab.offsetHeight;
             fbTab.style.animation = '';
         }
+    } else if (platform === 'snapchat') {
+        // Hide Instagram sub nav + session UI (Snapchat tab is self-contained)
+        document.getElementById('tabNav').style.display = 'none';
+        document.getElementById('sessionBadge').style.display = 'none';
+        document.getElementById('btnSession').style.display = 'none';
+
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        const snapTab = document.getElementById('tab-snapchat');
+        if (snapTab) {
+            snapTab.classList.add('active');
+            snapTab.style.animation = 'none';
+            snapTab.offsetHeight;
+            snapTab.style.animation = '';
+        }
     } else {
         openInfoModal(platform);
     }
@@ -2379,6 +2393,142 @@ function hideFbPfpError()   { document.getElementById('fbPfpErrorSection').class
 function clearFbPfpError()  { hideFbPfpError(); document.getElementById('fbPfpUrlInput').focus(); }
 function showFbPfpResults() { document.getElementById('fbPfpResultsSection').classList.add('visible'); }
 function hideFbPfpResults() { document.getElementById('fbPfpResultsSection').classList.remove('visible'); }
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB: SNAPCHAT DOWNLOADER (story / highlight / spotlight)
+// ═══════════════════════════════════════════════════════════════
+
+let currentSnapData = null;
+
+async function fetchSnapchat() {
+    const input = document.getElementById('snapUrlInput');
+    const url = input.value.trim();
+    if (!url) { input.focus(); return; }
+    if (!/snapchat\.com/i.test(url)) {
+        showSnapError('Please enter a valid Snapchat URL.');
+        return;
+    }
+
+    showSnapLoading();
+    hideSnapError();
+    hideSnapResults();
+
+    try {
+        const res = await fetch(`${API_BASE}/api/snapchat/fetch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            hideSnapLoading();
+            showSnapError(data.error || 'Could not fetch this Snapchat link.');
+            return;
+        }
+        currentSnapData = data;
+        renderSnapMedia(data);
+        hideSnapLoading();
+    } catch (err) {
+        hideSnapLoading();
+        console.error('Snapchat fetch error:', err);
+        showSnapError('Connection error. Make sure the server is running.');
+    }
+}
+
+function renderSnapMedia(data) {
+    const labelMap = { spotlight: 'Spotlight', story: 'Story', highlight: 'Highlight' };
+    const kindLabel = labelMap[data.kind] || '';
+    document.getElementById('snapUsername').textContent =
+        (data.username ? `@${data.username}` : 'Snapchat') + (kindLabel ? ` · ${kindLabel}` : '');
+    document.getElementById('snapMediaCount').textContent = `${data.items.length} item${data.items.length !== 1 ? 's' : ''}`;
+
+    const captionEl = document.getElementById('snapCaption');
+    if (data.title && data.title.trim()) {
+        captionEl.textContent = data.title.length > 300 ? data.title.slice(0, 300) + '…' : data.title;
+        captionEl.classList.add('visible');
+    } else {
+        captionEl.classList.remove('visible');
+    }
+
+    const grid = document.getElementById('snapMediaGrid');
+    grid.innerHTML = '';
+    data.items.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = 'media-item';
+        const proxySrc = `${API_BASE}/api/proxy-image?url=${encodeURIComponent(item.thumbnailUrl || item.url)}`;
+        div.innerHTML = `
+            <img src="${proxySrc}" alt="Snap ${index + 1}" loading="lazy" onerror="this.style.display='none'">
+            <span class="media-type-badge">${item.type === 'video' ? '▶ Video' : '📷 Photo'}</span>
+            <div class="media-item-overlay">
+                <button class="media-item-view" onclick="event.stopPropagation(); viewSnapItem(${index})" title="View">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                </button>
+                <button class="media-item-download" onclick="event.stopPropagation(); downloadSnapItem(${index})" title="Download">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+        grid.appendChild(div);
+    });
+
+    showSnapResults();
+}
+
+function viewSnapItem(index) {
+    if (!currentSnapData || !currentSnapData.items[index]) return;
+    const item = currentSnapData.items[index];
+    const proxyEndpoint = item.type === 'video' ? 'proxy-video' : 'proxy-image';
+    const viewUrl = `${API_BASE}/api/${proxyEndpoint}?url=${encodeURIComponent(item.url)}`;
+    window.open(viewUrl, '_blank', 'noopener,noreferrer');
+}
+
+function downloadSnapItem(index) {
+    if (!currentSnapData || !currentSnapData.items[index]) return;
+    const item = currentSnapData.items[index];
+    const ext = item.type === 'video' ? 'mp4' : 'jpg';
+    const filename = `omnisave_snapchat_${index + 1}.${ext}`;
+    const proxyEndpoint = item.type === 'video' ? 'proxy-video' : 'proxy-image';
+    const downloadUrl = `${API_BASE}/api/${proxyEndpoint}?url=${encodeURIComponent(item.url)}&download=true&filename=${encodeURIComponent(filename)}`;
+
+    showToast('⬇️', `Downloading ${item.type}…`);
+    fetch(downloadUrl)
+        .then(res => res.blob())
+        .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+        })
+        .catch(err => {
+            console.error('Snapchat download failed:', err);
+            showToast('❌', 'Download failed');
+        });
+}
+
+function downloadAllSnapMedia() {
+    if (!currentSnapData || !currentSnapData.items.length) return;
+    currentSnapData.items.forEach((_, i) => setTimeout(() => downloadSnapItem(i), i * 800));
+    showToast('⬇️', `Downloading ${currentSnapData.items.length} item${currentSnapData.items.length !== 1 ? 's' : ''}…`);
+}
+
+function showSnapLoading()  { document.getElementById('snapLoadingSection').classList.add('visible'); }
+function hideSnapLoading()  { document.getElementById('snapLoadingSection').classList.remove('visible'); }
+function showSnapError(m)   { document.getElementById('snapErrorText').textContent = m; document.getElementById('snapErrorSection').classList.add('visible'); }
+function hideSnapError()    { document.getElementById('snapErrorSection').classList.remove('visible'); }
+function clearSnapError()   { hideSnapError(); document.getElementById('snapUrlInput').focus(); }
+function showSnapResults()  { document.getElementById('snapResultsSection').classList.add('visible'); }
+function hideSnapResults()  { document.getElementById('snapResultsSection').classList.remove('visible'); }
 
 // ─── Coming Soon Information Modal ─────────────────────────────
 function openInfoModal(platform) {
