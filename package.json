@@ -1,6 +1,6 @@
 {
   "name": "instasave",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Instagram Video Viewer - View any Instagram reel or video inline",
   "main": "server.js",
   "scripts": {

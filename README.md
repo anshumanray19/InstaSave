@@ -1,25 +1,45 @@
-# 🎬 InstaSave — Instagram Video Viewer
+# ⚡ OmniSave — All-in-One Media Downloader
 
-**InstaSave** is a sleek, modern web application that allows you to view any Instagram reel or video inline, including content from private accounts that you follow. It features a beautiful glassmorphic UI, smooth animations, and a seamless video viewing experience.
+**OmniSave** is a sleek, modern web app for downloading public media from **Instagram, YouTube, Facebook, and Snapchat** — all from one clean, glassmorphic interface. Paste a link, preview the media, and save it in the best available quality.
 
 ---
 
 ## ✨ Features
 
-- **📺 View Any Video:** Supports Instagram Reels, Posts, and IGTV links.
-- **🔐 Private Account Support:** View videos from private accounts you follow by securely providing your Instagram `sessionid` cookie.
-- **🚀 Proxy Streaming:** Bypasses CORS issues by proxying video and image streams safely through the server.
-- **💾 Download & Share:** Download videos directly to your device or copy the video link with a single click.
-- **🕰️ Viewing History:** Keeps track of your recently viewed videos for quick access.
-- **🎨 Modern UI:** Beautiful glassmorphism design, animated background blobs, responsive layout, and an intuitive user experience.
+### 📷 Instagram
+- **Media Downloader** — any public reel, post, or carousel (multi-item posts return every photo & video).
+- **Bulk Downloader** — load a public profile's feed and select multiple posts to download at once.
+- **Private & Exclusive** — view/download content from private accounts you follow, using your `sessionid`.
+- **Story Downloader** — grab active stories & highlights.
+
+### ▶️ YouTube
+- **Every resolution** — 360p up to 1080p, 1440p & 4K, each delivered with audio merged in.
+- **Audio only** — extract high-quality MP3 / M4A from any video.
+- **Live progress** — real-time download & merge progress for large files.
+
+### 📘 Facebook
+- **Post / Reel** — download public videos, reels, and photos.
+- **Profile Picture** — grab the high-resolution profile picture of any public profile or Page.
+- **Story** — best-effort story preview download when publicly shared.
+
+### 👻 Snapchat
+- **Public stories** — paste `snapchat.com/@username` to save active story snaps.
+- **Highlights** — download saved highlight reels from public profiles.
+- **Spotlight** — save Spotlight videos without a watermark.
+
+### 🎨 General
+- **Proxy streaming** — bypasses CORS by safely proxying media through the server.
+- **Preview & download** — view each item inline, download individually or all at once.
+- **Modern UI** — glassmorphism design, animated blobs, responsive layout, deep-linkable pages.
 
 ---
 
 ## 🛠️ Technology Stack
 
-- **Frontend:** HTML5, CSS3, Vanilla JavaScript.
+- **Frontend:** HTML5, CSS3, Vanilla JavaScript (SPA, relative API paths).
 - **Backend:** Node.js, Express.js.
-- **Dependencies:** `cors`, `express`, `node-fetch`.
+- **Media tooling:** [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (YouTube & Facebook video extraction), [`ffmpeg-static`](https://www.npmjs.com/package/ffmpeg-static) (bundled — merges high-res video + audio).
+- **Dependencies:** `express`, `cors`, `node-fetch`, `ffmpeg-static`.
 
 ---
 
@@ -27,64 +47,77 @@
 
 ### Prerequisites
 
-Ensure you have [Node.js](https://nodejs.org/) installed on your machine.
+- [Node.js](https://nodejs.org/) (v18+ recommended).
+- **`yt-dlp`** on your `PATH` (required for YouTube & Facebook video downloads):
+  - Windows: `pip install yt-dlp` or drop `yt-dlp.exe` in the project folder.
+  - macOS/Linux: `pip install yt-dlp` or `brew install yt-dlp`.
+- **ffmpeg** is bundled automatically via the `ffmpeg-static` npm package — no separate install needed.
 
 ### Installation
 
-1. **Clone or Download the Repository**
-2. **Navigate to the Project Directory:**
+1. **Clone or download the repository.**
+2. **Navigate to the project directory:**
    ```bash
    cd InstaSave
    ```
-3. **Install Dependencies:**
+3. **Install dependencies:**
    ```bash
    npm install
    ```
 
 ### Running the Application
 
-Start the server using npm:
-
 ```bash
 npm start
 ```
-*Or for development mode:*
+*Or directly:*
 ```bash
-npm install
-
 node server.js
-
 ```
 
-The application will start running at `http://localhost:3000`. Open this URL in your web browser.
+The application runs at **`http://localhost:55964`**. Open this URL in your browser.
 
 ---
 
-## 🔐 How to View Private Videos (Session Connect)
+## 🌐 Hosting / Deployment
 
-To view videos from private accounts you follow, you need to connect your Instagram session to InstaSave.
+- The server listens on **port `55964`** by default.
+- The port is overridable with the `PORT` environment variable, so platforms that inject their own port (Render, Railway, Heroku, etc.) work automatically:
+  ```bash
+  PORT=8080 node server.js     # macOS/Linux
+  ```
+  ```powershell
+  $env:PORT=8080; node server.js   # Windows PowerShell
+  ```
+- Ensure `yt-dlp` is installed in the hosting environment for YouTube/Facebook video support. `ffmpeg` ships with the app via `ffmpeg-static`.
+- Sessions are kept in memory only (see below), so a restart clears any connected Instagram session — by design.
 
-1. **Open Instagram** in your desktop browser and ensure you are logged in.
-2. **Open Developer Tools** by pressing `F12` (or `Right Click -> Inspect`).
+---
+
+## 🔐 How to Download Private Instagram Content (Session Connect)
+
+To access content from private Instagram accounts you follow:
+
+1. **Open Instagram** in your desktop browser and log in.
+2. **Open Developer Tools** (`F12`, or Right Click → Inspect).
 3. Go to the **Application** tab (or **Storage** in Firefox).
-4. Under **Cookies** in the left sidebar, click on `https://www.instagram.com`.
-5. Find the row where the Name is `sessionid`.
-6. **Copy its Value**.
-7. In **InstaSave**, click the "Login" button at the top right, and paste your `sessionid` into the input field.
-8. Click **Connect**.
+4. Under **Cookies**, click `https://www.instagram.com`.
+5. Find the row named `sessionid` and **copy its value**.
+6. In OmniSave, click **Login** (top right), paste your `sessionid`, and click **Connect**.
 
-*Note: Your session ID is only kept in the server's temporary memory while it runs and is automatically destroyed when the server restarts.*
+> **Note:** Your session ID is kept only in the server's temporary memory while it runs and is automatically destroyed on restart. It is never written to disk or shared.
 
 ---
 
-## 📸 Screenshots & Usage
+## 🔗 Quick Links (deep-linking)
 
-1. **Paste Link:** Paste any supported Instagram link (`instagram.com/reel/...`, `instagram.com/p/...`, etc.) into the main search bar.
-2. **Click View:** The application will fetch the highest quality video and its thumbnail.
-3. **Enjoy:** Play the video, download it, or explore your recently viewed history.
+You can link straight to a section:
+
+- `/#how-it-works` — the guide
+- `/#instagram`, `/#youtube`, `/#facebook`, `/#snapchat` — open a specific downloader
 
 ---
 
 ## ⚠️ Disclaimer
 
-This application is intended for personal and educational use only. It is not affiliated with, endorsed, or sponsored by Instagram or Meta Platforms, Inc. Please respect copyright and privacy laws when viewing or downloading content.
+This application is intended for **personal and educational use only**. It is not affiliated with, endorsed, or sponsored by Instagram, YouTube, Meta Platforms, Inc., or Snap Inc. All trademarks belong to their respective owners. Please respect copyright and privacy laws when downloading content.
