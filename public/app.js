@@ -130,6 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (h === 'how-it-works') showHowItWorks();
         else if (h === 'privacy') showPrivacy();
         else if (h === 'terms') showTerms();
+        else if (h === 'install') showInstall();
         else if (['instagram', 'youtube', 'facebook', 'snapchat', 'reddit'].includes(h)) openDownloader(h);
     };
     routeFromHash();
@@ -140,6 +141,41 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Escape') closeMobileMenu();
     });
 });
+
+// ─── Splash screen (initial load only) ─────────────────────────
+// Hides once the page has loaded, with a short minimum display for polish.
+// It never reappears on tab navigation because the SPA doesn't reload.
+(function () {
+    const splash = document.getElementById('appSplash');
+    if (!splash) return;
+    const start = Date.now();
+    const MIN_MS = 650;
+    const hide = () => {
+        const wait = Math.max(0, MIN_MS - (Date.now() - start));
+        setTimeout(() => {
+            splash.classList.add('hidden');
+            setTimeout(() => splash.remove(), 600);
+        }, wait);
+    };
+    if (document.readyState === 'complete') hide();
+    else window.addEventListener('load', hide);
+    // Safety net: never let the splash get stuck
+    setTimeout(() => { if (document.body.contains(splash)) { splash.classList.add('hidden'); } }, 4000);
+})();
+
+// ─── Service worker (installability + offline app shell) ───────
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.log('SW registration skipped:', err.message);
+        });
+    });
+}
+
+// Scroll the viewport back to the top — called on every page/tab navigation
+function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  TAB NAVIGATION
@@ -163,6 +199,7 @@ function switchTab(tabName) {
         target.offsetHeight; // force reflow
         target.style.animation = '';
     }
+    scrollToTop();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2070,6 +2107,41 @@ function showStandaloneTab(tabId) {
 function showHowItWorks() { showStandaloneTab('tab-howto'); }
 function showPrivacy()    { showStandaloneTab('tab-privacy'); }
 function showTerms()      { showStandaloneTab('tab-terms'); }
+function showInstall()    { showStandaloneTab('tab-install'); }
+
+// ─── PWA install prompt (Android / desktop Chrome) ─────────────
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Stash the event so we can trigger it from our own button
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const cta = document.getElementById('installCta');
+    if (cta) cta.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    const cta = document.getElementById('installCta');
+    if (cta) cta.style.display = 'none';
+    showToast('✅', 'OmniSave installed!');
+});
+
+async function triggerInstall() {
+    if (!deferredInstallPrompt) {
+        // iOS Safari & browsers without the prompt API: guide the user manually
+        showToast('ℹ️', 'Use your browser menu → "Add to Home Screen".');
+        return;
+    }
+    deferredInstallPrompt.prompt();
+    try {
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        if (outcome === 'accepted') showToast('⬇️', 'Installing OmniSave…');
+    } catch {}
+    deferredInstallPrompt = null;
+    const cta = document.getElementById('installCta');
+    if (cta) cta.style.display = 'none';
+}
 
 // ─── Mobile slide-out menu ──────────────────────────────────────
 function toggleMobileMenu() {
@@ -2089,6 +2161,7 @@ function navMobile(target) {
     switch (target) {
         case 'home': showHomepage(); break;
         case 'howto': showHowItWorks(); break;
+        case 'install': showInstall(); break;
         case 'privacy': showPrivacy(); break;
         case 'terms': showTerms(); break;
         case 'instagram':
@@ -2173,7 +2246,9 @@ function openDownloader(platform) {
         }
     } else {
         openInfoModal(platform);
+        return; // modal — don't scroll the page
     }
+    scrollToTop();
 }
 
 // ═══════════════════════════════════════════════════════════════
