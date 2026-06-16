@@ -104,6 +104,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') fetchSnapchat();
     });
 
+    // Enter key for Reddit tab
+    document.getElementById('redditUrlInput')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') fetchReddit();
+    });
+
     // Enter key for Facebook tabs
     document.getElementById('fbPostUrlInput')?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') fetchFacebookPost();
@@ -125,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (h === 'how-it-works') showHowItWorks();
         else if (h === 'privacy') showPrivacy();
         else if (h === 'terms') showTerms();
-        else if (['instagram', 'youtube', 'facebook', 'snapchat'].includes(h)) openDownloader(h);
+        else if (['instagram', 'youtube', 'facebook', 'snapchat', 'reddit'].includes(h)) openDownloader(h);
     };
     routeFromHash();
     window.addEventListener('hashchange', routeFromHash);
@@ -2090,6 +2095,7 @@ function navMobile(target) {
         case 'youtube':
         case 'facebook':
         case 'snapchat':
+        case 'reddit':
             openDownloader(target);
             break;
     }
@@ -2150,6 +2156,20 @@ function openDownloader(platform) {
             snapTab.style.animation = 'none';
             snapTab.offsetHeight;
             snapTab.style.animation = '';
+        }
+    } else if (platform === 'reddit') {
+        // Hide Instagram sub nav + session UI (Reddit tab is self-contained)
+        document.getElementById('tabNav').style.display = 'none';
+        document.getElementById('sessionBadge').style.display = 'none';
+        document.getElementById('btnSession').style.display = 'none';
+
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        const redditTab = document.getElementById('tab-reddit');
+        if (redditTab) {
+            redditTab.classList.add('active');
+            redditTab.style.animation = 'none';
+            redditTab.offsetHeight;
+            redditTab.style.animation = '';
         }
     } else {
         openInfoModal(platform);
@@ -2619,6 +2639,264 @@ function hideSnapError()    { document.getElementById('snapErrorSection').classL
 function clearSnapError()   { hideSnapError(); document.getElementById('snapUrlInput').focus(); }
 function showSnapResults()  { document.getElementById('snapResultsSection').classList.add('visible'); }
 function hideSnapResults()  { document.getElementById('snapResultsSection').classList.remove('visible'); }
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB: REDDIT DOWNLOADER (images / gifs / galleries / videos)
+// ═══════════════════════════════════════════════════════════════
+
+let currentRedditData = null;
+
+async function fetchReddit() {
+    const input = document.getElementById('redditUrlInput');
+    const url = input.value.trim();
+    if (!url) { input.focus(); return; }
+    if (!/reddit\.com|redd\.it/i.test(url)) {
+        showRedditError('Please enter a valid Reddit post URL.');
+        return;
+    }
+
+    showRedditLoading();
+    hideRedditError();
+    hideRedditResults();
+
+    try {
+        const res = await fetch(`${API_BASE}/api/reddit/fetch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            hideRedditLoading();
+            showRedditError(data.error || 'Could not fetch this Reddit post.');
+            return;
+        }
+        currentRedditData = data;
+        renderRedditMedia(data);
+        hideRedditLoading();
+    } catch (err) {
+        hideRedditLoading();
+        console.error('Reddit fetch error:', err);
+        showRedditError('Connection error. Make sure the server is running.');
+    }
+}
+
+function renderRedditMedia(data) {
+    const sub = data.subreddit ? data.subreddit : 'Reddit';
+    document.getElementById('redditTitle').textContent = sub + (data.author ? ' · ' + data.author : '');
+    document.getElementById('redditMediaCount').textContent = `${data.items.length} item${data.items.length !== 1 ? 's' : ''}`;
+
+    const grid = document.getElementById('redditMediaGrid');
+    grid.innerHTML = '';
+    data.items.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = 'media-item';
+        const thumb = item.thumbnailUrl || item.url;
+        const proxySrc = `${API_BASE}/api/proxy-image?url=${encodeURIComponent(thumb)}`;
+        const badge = item.type === 'video' ? '▶ Video' : '📷 Image';
+        div.innerHTML = `
+            <img src="${proxySrc}" alt="Item ${index + 1}" loading="lazy" onerror="this.style.display='none'">
+            <span class="media-type-badge">${badge}</span>
+            <div class="media-item-overlay">
+                <button class="media-item-view" onclick="event.stopPropagation(); viewRedditItem(${index})" title="View">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                </button>
+                <button class="media-item-download" onclick="event.stopPropagation(); downloadRedditItem(${index})" title="Download">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+        grid.appendChild(div);
+    });
+
+    showRedditResults();
+}
+
+function viewRedditItem(index) {
+    const item = currentRedditData?.items[index];
+    if (!item) return;
+    // v.redd.it videos need merging, so "view" opens the source thumbnail/preview;
+    // direct images/gifs/mp4s open straight through the proxy.
+    if (item.needsMerge) {
+        const t = item.thumbnailUrl;
+        if (t) window.open(`${API_BASE}/api/proxy-image?url=${encodeURIComponent(t)}`, '_blank', 'noopener,noreferrer');
+        else showToast('ℹ️', 'Press Download to merge & save this video.');
+        return;
+    }
+    const proxyEndpoint = item.type === 'video' ? 'proxy-video' : 'proxy-image';
+    window.open(`${API_BASE}/api/${proxyEndpoint}?url=${encodeURIComponent(item.url)}`, '_blank', 'noopener,noreferrer');
+}
+
+function downloadRedditItem(index) {
+    const item = currentRedditData?.items[index];
+    if (!item) return;
+
+    // v.redd.it videos: merge video+audio via ffmpeg with live progress
+    if (item.needsMerge) {
+        startRedditVideoDownload(item, index);
+        return;
+    }
+
+    // Direct image / gif / mp4: stream through the proxy as a blob
+    const ext = item.type === 'video' ? 'mp4' : (/\.png(\?|$)/i.test(item.url) ? 'png' : /\.gif(\?|$)/i.test(item.url) ? 'gif' : 'jpg');
+    const filename = `omnisave_reddit_${index + 1}.${ext}`;
+    const proxyEndpoint = item.type === 'video' ? 'proxy-video' : 'proxy-image';
+    const downloadUrl = `${API_BASE}/api/${proxyEndpoint}?url=${encodeURIComponent(item.url)}&download=true&filename=${encodeURIComponent(filename)}`;
+
+    showToast('⬇️', `Downloading ${item.type}…`);
+    fetch(downloadUrl)
+        .then(res => res.blob())
+        .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+        })
+        .catch(err => {
+            console.error('Reddit download failed:', err);
+            showToast('❌', 'Download failed');
+        });
+}
+
+function downloadAllRedditMedia() {
+    if (!currentRedditData || !currentRedditData.items.length) return;
+    // If the post is a single v.redd.it video, just run that one
+    currentRedditData.items.forEach((item, i) => {
+        if (item.needsMerge) {
+            setTimeout(() => downloadRedditItem(i), 0); // progress modal handles it
+        } else {
+            setTimeout(() => downloadRedditItem(i), i * 800);
+        }
+    });
+    showToast('⬇️', `Downloading ${currentRedditData.items.length} item${currentRedditData.items.length !== 1 ? 's' : ''}…`);
+}
+
+// ─── v.redd.it video download with progress (SSE + ffmpeg merge) ───
+let redditActiveDownload = null;
+
+function startRedditVideoDownload(item, index) {
+    if (redditActiveDownload) {
+        showToast('⚠️', 'A video download is already in progress.');
+        return;
+    }
+    const safeSub = (currentRedditData?.subreddit || 'reddit').replace(/[^a-zA-Z0-9]/g, '');
+    const filename = `omnisave_${safeSub}_${index + 1}.mp4`;
+
+    const params = new URLSearchParams({ filename, duration: String(item.duration || 0) });
+    if (item.dashUrl) params.set('dashUrl', item.dashUrl);
+    if (item.fallbackUrl) params.set('fallbackUrl', item.fallbackUrl);
+    const prepareUrl = `${API_BASE}/api/reddit/prepare?${params.toString()}`;
+
+    showRedditProgress(filename);
+    const source = new EventSource(prepareUrl);
+    redditActiveDownload = { source };
+
+    source.addEventListener('progress', (e) => {
+        try { updateRedditProgress(JSON.parse(e.data)); } catch {}
+    });
+    source.addEventListener('ready', (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            redditProgressReady(data);
+            const a = document.createElement('a');
+            a.href = `${API_BASE}/api/reddit/file/${data.token}`;
+            a.download = data.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => hideRedditProgress(), 1800);
+        } catch (err) {
+            hideRedditProgress();
+            showToast('❌', 'Could not start file save.');
+        } finally {
+            source.close();
+            redditActiveDownload = null;
+        }
+    });
+    source.addEventListener('fail', (e) => {
+        source.close();
+        redditActiveDownload = null;
+        hideRedditProgress();
+        let msg = 'Download failed.';
+        try { msg = JSON.parse(e.data).error || msg; } catch {}
+        showToast('❌', msg);
+    });
+    source.onerror = () => {
+        if (source.readyState === EventSource.CLOSED && redditActiveDownload) {
+            source.close();
+            redditActiveDownload = null;
+            hideRedditProgress();
+            showToast('❌', 'Connection lost during download.');
+        }
+    };
+}
+
+function cancelRedditDownload() {
+    if (!redditActiveDownload) return;
+    redditActiveDownload.source.close();
+    redditActiveDownload = null;
+    hideRedditProgress();
+    showToast('🛑', 'Download cancelled');
+}
+
+function showRedditProgress(filename) {
+    const modal = document.getElementById('redditProgressModal');
+    if (!modal) return;
+    modal.querySelector('.yt-progress-filename').textContent = filename;
+    modal.querySelector('.yt-progress-bar').style.width = '0%';
+    modal.querySelector('.yt-progress-percent').textContent = '0%';
+    modal.querySelector('.yt-progress-info').textContent = '';
+    modal.querySelector('.yt-progress-phase').textContent = 'Connecting…';
+    modal.classList.remove('done', 'indeterminate');
+    modal.classList.add('visible', 'indeterminate');
+}
+
+function updateRedditProgress(data) {
+    const modal = document.getElementById('redditProgressModal');
+    if (!modal) return;
+    if (data.phase === 'downloading') {
+        const pct = Math.max(0, Math.min(100, data.percent || 0));
+        modal.classList.toggle('indeterminate', pct <= 0);
+        modal.querySelector('.yt-progress-bar').style.width = `${pct}%`;
+        modal.querySelector('.yt-progress-percent').textContent = `${pct.toFixed(1)}%`;
+        modal.querySelector('.yt-progress-phase').textContent = 'Merging video + audio…';
+    }
+}
+
+function redditProgressReady(data) {
+    const modal = document.getElementById('redditProgressModal');
+    if (!modal) return;
+    modal.classList.remove('indeterminate');
+    modal.classList.add('done');
+    modal.querySelector('.yt-progress-bar').style.width = '100%';
+    modal.querySelector('.yt-progress-percent').textContent = '100%';
+    modal.querySelector('.yt-progress-info').textContent = data.size ? formatFilesize(data.size) : '';
+    modal.querySelector('.yt-progress-phase').textContent = '✓ Ready — opening save dialog…';
+}
+
+function hideRedditProgress() {
+    const modal = document.getElementById('redditProgressModal');
+    if (modal) modal.classList.remove('visible');
+}
+
+function showRedditLoading()  { document.getElementById('redditLoadingSection').classList.add('visible'); }
+function hideRedditLoading()  { document.getElementById('redditLoadingSection').classList.remove('visible'); }
+function showRedditError(m)   { document.getElementById('redditErrorText').textContent = m; document.getElementById('redditErrorSection').classList.add('visible'); }
+function hideRedditError()    { document.getElementById('redditErrorSection').classList.remove('visible'); }
+function clearRedditError()   { hideRedditError(); document.getElementById('redditUrlInput').focus(); }
+function showRedditResults()  { document.getElementById('redditResultsSection').classList.add('visible'); }
+function hideRedditResults()  { document.getElementById('redditResultsSection').classList.remove('visible'); }
 
 // ─── Coming Soon Information Modal ─────────────────────────────
 function openInfoModal(platform) {

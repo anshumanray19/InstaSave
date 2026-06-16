@@ -1929,8 +1929,9 @@ app.get('/api/youtube/prepare', (req, res) => {
     });
 });
 
-// GET /api/youtube/file/:token — Serve the prepared file as a native download
-app.get('/api/youtube/file/:token', (req, res) => {
+// Shared handler: serve a prepared file (by token) as a native download.
+// Used by both the YouTube and Reddit progress flows.
+function serveTokenFile(req, res) {
     const fs = require('fs');
     const info = pendingDownloads.get(req.params.token);
     if (!info) {
@@ -1949,7 +1950,11 @@ app.get('/api/youtube/file/:token', (req, res) => {
     };
     stream.on('close', finalize);
     stream.on('error', finalize);
-});
+}
+
+// GET /api/youtube/file/:token — Serve the prepared file as a native download
+app.get('/api/youtube/file/:token', serveTokenFile);
+app.get('/api/reddit/file/:token', serveTokenFile);
 
 function findTempFile(basePath) {
     const fs = require('fs');
@@ -2482,6 +2487,316 @@ app.post('/api/snapchat/fetch', async (req, res) => {
         console.error('[Snapchat] Error:', err);
         return res.status(500).json({ error: 'Server error: ' + err.message });
     }
+});
+
+// ─── REDDIT DOWNLOADER ────────────────────────────────────────────────
+// Reddit blocks anonymous server-side access (the public .json returns 403),
+// so we use the official OAuth "app-only" flow. Set these env vars from a free
+// Reddit app at https://www.reddit.com/prefs/apps (type: "script" or "web app"):
+//   REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET
+// Media itself (i.redd.it / v.redd.it CDN) is not auth-gated — only the API is.
+const REDDIT_CLIENT_ID = process.env.REDDIT_CLIENT_ID || '';
+const REDDIT_CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET || '';
+const REDDIT_UA = 'web:omnisave:v1.0 (by /u/omnisave)';
+
+let redditToken = { value: null, expiresAt: 0 };
+
+async function getRedditToken() {
+    // Reuse cached token until ~1 min before expiry
+    if (redditToken.value && Date.now() < redditToken.expiresAt - 60000) {
+        return redditToken.value;
+    }
+    if (!REDDIT_CLIENT_ID || !REDDIT_CLIENT_SECRET) {
+        const err = new Error('NOT_CONFIGURED');
+        err.code = 'NOT_CONFIGURED';
+        throw err;
+    }
+    const basic = Buffer.from(`${REDDIT_CLIENT_ID}:${REDDIT_CLIENT_SECRET}`).toString('base64');
+    const res = await fetch('https://www.reddit.com/api/v1/access_token', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Basic ${basic}`,
+            'User-Agent': REDDIT_UA,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'grant_type=client_credentials',
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        console.error(`[Reddit] Token request failed: ${res.status} ${body.slice(0, 120)}`);
+        throw new Error(res.status === 401 ? 'Invalid Reddit API credentials.' : `Reddit auth failed (${res.status}).`);
+    }
+    const data = await res.json();
+    redditToken = {
+        value: data.access_token,
+        expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
+    };
+    console.log('[Reddit] Obtained app-only token');
+    return redditToken.value;
+}
+
+// Convert any reddit URL into the api comments path (e.g. /r/sub/comments/abc123)
+function redditCommentsPath(rawUrl) {
+    try {
+        let u = rawUrl.trim();
+        // Resolve short links like redd.it/abc123 → /comments/abc123
+        const shortMatch = u.match(/redd\.it\/([a-z0-9]+)/i);
+        if (shortMatch && !/\/comments\//i.test(u)) {
+            return `/comments/${shortMatch[1]}`;
+        }
+        const url = new URL(u.startsWith('http') ? u : `https://www.reddit.com/${u}`);
+        let p = url.pathname;
+        // Strip trailing slash and any /comment/ deep-link suffix; keep through the post id
+        const m = p.match(/\/r\/[^/]+\/comments\/[a-z0-9]+/i) || p.match(/\/comments\/[a-z0-9]+/i);
+        return m ? m[0] : p.replace(/\/$/, '');
+    } catch {
+        return null;
+    }
+}
+
+function bestPreviewImage(img) {
+    if (!img) return null;
+    // source is highest-res; URLs are HTML-escaped in the API
+    const u = img.source?.url || (img.resolutions && img.resolutions[img.resolutions.length - 1]?.url);
+    return u ? u.replace(/&amp;/g, '&') : null;
+}
+
+// Parse a single Reddit post object into normalized media items
+function parseRedditPost(post) {
+    const items = [];
+    const add = (it) => { if (it && it.url) items.push(it); };
+
+    // 1. Native video (v.redd.it) — DASH, needs video+audio merge
+    if (post.is_video && post.media?.reddit_video) {
+        const rv = post.media.reddit_video;
+        add({
+            type: 'video',
+            needsMerge: true,
+            dashUrl: rv.dash_url || null,
+            fallbackUrl: rv.fallback_url || null,
+            hlsUrl: rv.hls_url || null,
+            duration: rv.duration || 0,
+            hasAudio: rv.has_audio !== false,
+            thumbnailUrl: bestPreviewImage(post.preview?.images?.[0]),
+        });
+        return { items, hasMore: false };
+    }
+
+    // 2. Gallery — multiple images/gifs
+    if (post.is_gallery && post.media_metadata && post.gallery_data) {
+        for (const g of post.gallery_data.items || []) {
+            const meta = post.media_metadata[g.media_id];
+            if (!meta) continue;
+            // m = mime; s = source (largest). For gifs, s.gif/s.mp4; for images, s.u
+            if (meta.s?.mp4) {
+                add({ type: 'video', url: meta.s.mp4.replace(/&amp;/g, '&'), thumbnailUrl: (meta.s.gif || meta.s.u || '').replace(/&amp;/g, '&') || null });
+            } else if (meta.s?.gif) {
+                add({ type: 'image', url: meta.s.gif.replace(/&amp;/g, '&'), thumbnailUrl: meta.s.gif.replace(/&amp;/g, '&') });
+            } else if (meta.s?.u) {
+                const u = meta.s.u.replace(/&amp;/g, '&');
+                add({ type: 'image', url: u, thumbnailUrl: u });
+            }
+        }
+        return { items, hasMore: false };
+    }
+
+    // 3. Animated GIF served as mp4 (gifs, gfycat-mirrored, etc.)
+    const mp4Variant = post.preview?.images?.[0]?.variants?.mp4?.source?.url;
+    if (mp4Variant) {
+        add({
+            type: 'video',
+            url: mp4Variant.replace(/&amp;/g, '&'),
+            thumbnailUrl: bestPreviewImage(post.preview?.images?.[0]),
+        });
+        return { items, hasMore: false };
+    }
+
+    // 4. Direct image (i.redd.it or external direct image link)
+    const directUrl = post.url_overridden_by_dest || post.url || '';
+    if (/\.(jpe?g|png|webp|gif)$/i.test(directUrl)) {
+        const isGif = /\.gif$/i.test(directUrl);
+        add({ type: isGif ? 'image' : 'image', url: directUrl, thumbnailUrl: bestPreviewImage(post.preview?.images?.[0]) || directUrl });
+        return { items, hasMore: false };
+    }
+
+    // 5. Fallback: any preview image we can find (covers most image posts)
+    const prev = bestPreviewImage(post.preview?.images?.[0]);
+    if (prev) {
+        add({ type: 'image', url: prev, thumbnailUrl: prev });
+    }
+    return { items, hasMore: false };
+}
+
+// POST /api/reddit/fetch — extract media metadata from a Reddit post URL
+app.post('/api/reddit/fetch', async (req, res) => {
+    const { url } = req.body;
+    if (!url || !url.trim()) {
+        return res.status(400).json({ error: 'URL is required' });
+    }
+    if (!/reddit\.com|redd\.it/i.test(url)) {
+        return res.status(400).json({ error: 'Please paste a Reddit post URL (reddit.com/... or redd.it/...).' });
+    }
+
+    const commentsPath = redditCommentsPath(url);
+    if (!commentsPath || !/\/comments\/[a-z0-9]+/i.test(commentsPath)) {
+        return res.status(400).json({ error: 'That doesn\'t look like a Reddit post link. Use a full post URL (it contains /comments/).' });
+    }
+
+    console.log(`\n[Reddit] Fetch: ${commentsPath}`);
+
+    let token;
+    try {
+        token = await getRedditToken();
+    } catch (err) {
+        if (err.code === 'NOT_CONFIGURED') {
+            return res.status(503).json({
+                error: 'Reddit downloader isn\'t configured yet. The server needs REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET (free — create an app at reddit.com/prefs/apps).',
+            });
+        }
+        return res.status(502).json({ error: err.message });
+    }
+
+    try {
+        const apiUrl = `https://oauth.reddit.com${commentsPath}?raw_json=1`;
+        const apiRes = await fetch(apiUrl, {
+            headers: { 'Authorization': `Bearer ${token}`, 'User-Agent': REDDIT_UA },
+        });
+        console.log(`[Reddit] API ${apiRes.status}`);
+        if (!apiRes.ok) {
+            if (apiRes.status === 401) { redditToken = { value: null, expiresAt: 0 }; }
+            return res.status(apiRes.status === 404 ? 404 : 502).json({
+                error: apiRes.status === 404
+                    ? 'Post not found — it may have been removed or the link is wrong.'
+                    : `Reddit API error (${apiRes.status}). Try again in a moment.`,
+            });
+        }
+
+        const data = await apiRes.json();
+        const post = data?.[0]?.data?.children?.[0]?.data;
+        if (!post) {
+            return res.status(404).json({ error: 'Could not read post data from Reddit.' });
+        }
+
+        const { items } = parseRedditPost(post);
+        if (items.length === 0) {
+            return res.status(404).json({
+                error: 'No downloadable media found in this post. It may be a text post, a poll, or a link to an unsupported site.',
+            });
+        }
+
+        return res.json({
+            success: true,
+            items,
+            title: post.title || '',
+            subreddit: post.subreddit_name_prefixed || (post.subreddit ? `r/${post.subreddit}` : ''),
+            author: post.author ? `u/${post.author}` : '',
+            nsfw: !!post.over_18,
+        });
+    } catch (err) {
+        console.error('[Reddit] Error:', err);
+        return res.status(500).json({ error: 'Server error: ' + err.message });
+    }
+});
+
+// GET /api/reddit/prepare — merge a v.redd.it DASH video (video+audio) with
+// ffmpeg, streaming progress over SSE, then hand back a download token.
+app.get('/api/reddit/prepare', (req, res) => {
+    const { dashUrl, fallbackUrl, duration, filename } = req.query;
+    const sourceUrl = dashUrl || fallbackUrl;
+    if (!sourceUrl) {
+        res.status(400).json({ error: 'dashUrl or fallbackUrl is required' });
+        return;
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    const sendEvent = (event, data) => {
+        if (res.writableEnded) return;
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const fs = require('fs');
+    const os = require('os');
+    const ffmpegBin = FFMPEG_PATH || 'ffmpeg';
+    const tempBase = path.join(os.tmpdir(), `omnisave-rd-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const outPath = `${tempBase}.mp4`;
+    const totalDuration = parseFloat(duration) || 0;
+    const dlFilename = filename || 'omnisave_reddit.mp4';
+
+    // ffmpeg reads the DASH manifest (or fallback mp4), copies streams into mp4.
+    // -progress pipe:1 emits machine-readable progress (out_time_ms=...).
+    const args = [
+        '-y',
+        '-i', sourceUrl,
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        '-progress', 'pipe:1',
+        '-loglevel', 'error',
+        outPath,
+    ];
+
+    console.log(`[Reddit Prepare] ffmpeg merge from ${sourceUrl.slice(0, 60)}…`);
+    const child = spawn(ffmpegBin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderrBuf = '';
+    let clientClosed = false;
+    let lastPercent = -1;
+
+    // Parse -progress output: out_time_ms=12345678 (microseconds)
+    child.stdout.on('data', (d) => {
+        const text = d.toString();
+        const m = [...text.matchAll(/out_time_ms=(\d+)/g)].pop();
+        if (m && totalDuration > 0) {
+            const sec = parseInt(m[1], 10) / 1000000;
+            const percent = Math.min(99, (sec / totalDuration) * 100);
+            if (percent - lastPercent >= 0.5) {
+                lastPercent = percent;
+                sendEvent('progress', { phase: 'downloading', percent });
+            }
+        } else if (text.includes('progress=continue') && lastPercent < 0) {
+            sendEvent('progress', { phase: 'downloading', percent: 0 });
+        }
+    });
+
+    child.stderr.on('data', (d) => { stderrBuf += d.toString(); });
+
+    child.on('error', (err) => {
+        sendEvent('fail', { error: 'ffmpeg failed to start: ' + err.message });
+        res.end();
+    });
+
+    child.on('close', (code) => {
+        if (clientClosed) { cleanupTempFiles(tempBase); return; }
+        if (code !== 0 || !fs.existsSync(outPath)) {
+            cleanupTempFiles(tempBase);
+            console.error(`[Reddit Prepare] ffmpeg exit ${code}: ${stderrBuf.slice(0, 200)}`);
+            sendEvent('fail', { error: 'Failed to process the video. ' + (stderrBuf.slice(0, 120) || '') });
+            res.end();
+            return;
+        }
+        const stat = fs.statSync(outPath);
+        const token = crypto.randomBytes(16).toString('hex');
+        const finalFilename = dlFilename.toLowerCase().endsWith('.mp4') ? dlFilename : dlFilename.replace(/\.[^.]+$/, '') + '.mp4';
+        pendingDownloads.set(token, {
+            path: outPath,
+            tempBase,
+            filename: finalFilename,
+            contentType: 'video/mp4',
+            size: stat.size,
+            createdAt: Date.now(),
+        });
+        console.log(`[Reddit Prepare] Ready: ${token} (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+        sendEvent('ready', { token, filename: finalFilename, size: stat.size });
+        res.end();
+    });
+
+    req.on('close', () => {
+        clientClosed = true;
+        if (!child.killed) child.kill('SIGTERM');
+    });
 });
 
 // SPA fallback

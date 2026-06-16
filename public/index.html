@@ -114,6 +114,17 @@
             </svg>
             Snapchat
         </a>
+        <a class="mobile-menu-item" onclick="navMobile('reddit')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="3" />
+                <circle cx="12" cy="5" r="1" />
+                <path d="M12 6v3" />
+                <path d="M6 12h3" />
+                <path d="M15 12h3" />
+            </svg>
+            Reddit
+        </a>
 
         <div class="mobile-menu-label">More</div>
         <a class="mobile-menu-item" onclick="navMobile('howto')">
@@ -358,15 +369,21 @@
                                 <path d="M15 12h3" />
                             </svg>
                         </div>
-                        <span class="status-badge coming-soon">
+                        <span class="status-badge active">
                             <span class="status-dot"></span>
-                            Coming Soon
+                            Active
                         </span>
                     </div>
                     <h3 class="downloader-card-title">Reddit Downloader</h3>
                     <p class="downloader-card-desc">Save Reddit videos with HD sound, export image galleries and gifs.
                     </p>
-                    <button class="downloader-card-btn">Learn More</button>
+                    <button class="downloader-card-btn">
+                        Launch Downloader
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                    </button>
                 </div>
 
                 <!-- Threads Downloader Card -->
@@ -1199,6 +1216,74 @@
             </section>
         </div>
 
+        <!-- ═══════════ TAB 9: Reddit Downloader ═══════════ -->
+        <div class="tab-content" id="tab-reddit">
+            <section class="hero">
+                <h1 class="hero-title">
+                    <span class="hero-emoji">👽</span>
+                    Reddit Downloader
+                </h1>
+                <p class="hero-subtitle">Download images, GIFs, galleries &amp; videos (with sound) from any public Reddit post</p>
+            </section>
+
+            <section class="input-card glass-card">
+                <div class="input-wrapper">
+                    <div class="input-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                        </svg>
+                    </div>
+                    <input type="url" id="redditUrlInput" class="url-input"
+                        placeholder="Paste a Reddit post URL (reddit.com/r/.../comments/...)" autocomplete="off" spellcheck="false">
+                    <button class="btn-fetch" onclick="fetchReddit()">
+                        <svg class="btn-fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        <span class="btn-fetch-text">Fetch</span>
+                    </button>
+                </div>
+                <div class="input-hint">
+                    Supports: images · GIFs · galleries · v.redd.it videos (merged with audio) · redd.it short links
+                </div>
+            </section>
+
+            <section class="loading-section" id="redditLoadingSection">
+                <div class="loader">
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                </div>
+                <p class="loading-text">Fetching media from Reddit...</p>
+            </section>
+
+            <section class="error-section glass-card" id="redditErrorSection">
+                <div class="error-icon">⚠️</div>
+                <p class="error-text" id="redditErrorText"></p>
+                <button class="btn-retry" onclick="clearRedditError()">Try Again</button>
+            </section>
+
+            <section class="media-results glass-card" id="redditResultsSection">
+                <div class="media-results-header">
+                    <div class="media-results-user">
+                        <span class="media-results-username" id="redditTitle">Reddit Post</span>
+                        <span class="media-results-count" id="redditMediaCount">0 items</span>
+                    </div>
+                    <button class="btn-download-all" onclick="downloadAllRedditMedia()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Download All
+                    </button>
+                </div>
+                <div class="media-grid" id="redditMediaGrid"></div>
+            </section>
+        </div>
+
         <!-- ═══════════ TAB 5: How It Works ═══════════ -->
         <div class="tab-content" id="tab-howto">
             <section class="hero howto-hero">
@@ -1537,6 +1622,7 @@
                     <a class="footer-link" href="#" onclick="openDownloader('youtube'); return false;">YouTube</a>
                     <a class="footer-link" href="#" onclick="openDownloader('facebook'); return false;">Facebook</a>
                     <a class="footer-link" href="#" onclick="openDownloader('snapchat'); return false;">Snapchat</a>
+                    <a class="footer-link" href="#" onclick="openDownloader('reddit'); return false;">Reddit</a>
                 </div>
 
                 <!-- Resources column -->
@@ -1684,6 +1770,37 @@
                 <div class="yt-progress-filename"></div>
             </div>
             <button class="yt-progress-cancel" type="button" aria-label="Cancel download" onclick="cancelYtDownload()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
+        </div>
+        <div class="yt-progress-bar-wrap">
+            <div class="yt-progress-bar"></div>
+        </div>
+        <div class="yt-progress-stats">
+            <span class="yt-progress-percent">0%</span>
+            <span class="yt-progress-info"></span>
+        </div>
+        <div class="yt-progress-phase">Starting…</div>
+    </div>
+
+    <!-- Reddit download progress modal -->
+    <div class="yt-progress-modal" id="redditProgressModal" role="status" aria-live="polite">
+        <div class="yt-progress-header">
+            <span class="yt-progress-icon" style="background: linear-gradient(135deg, #ff4500, #ff6a33);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+            </span>
+            <div class="yt-progress-titles">
+                <div class="yt-progress-title">Preparing your download</div>
+                <div class="yt-progress-filename"></div>
+            </div>
+            <button class="yt-progress-cancel" type="button" aria-label="Cancel download" onclick="cancelRedditDownload()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />

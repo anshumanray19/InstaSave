@@ -1,6 +1,6 @@
 # ⚡ OmniSave — All-in-One Media Downloader
 
-**OmniSave** is a sleek, modern web app for downloading public media from **Instagram, YouTube, Facebook, and Snapchat** — all from one clean, glassmorphic interface. Paste a link, preview the media, and save it in the best available quality.
+**OmniSave** is a sleek, modern web app for downloading public media from **Instagram, YouTube, Facebook, Snapchat, and Reddit** — all from one clean, glassmorphic interface. Paste a link, preview the media, and save it in the best available quality.
 
 ---
 
@@ -26,6 +26,12 @@
 - **Public stories** — paste `snapchat.com/@username` to save active story snaps.
 - **Highlights** — download saved highlight reels from public profiles.
 - **Spotlight** — save Spotlight videos without a watermark.
+
+### 👽 Reddit
+- **Images & GIFs** — any public image or GIF post.
+- **Galleries** — every image/video in a multi-item gallery post.
+- **Videos** — v.redd.it videos merged **with sound** (server-side ffmpeg), shown with live download progress.
+- Requires free Reddit API credentials (see [Reddit Setup](#-reddit-setup) below).
 
 ### 🎨 General
 - **Proxy streaming** — bypasses CORS by safely proxying media through the server.
@@ -90,7 +96,39 @@ The application runs at **`http://localhost:55964`**. Open this URL in your brow
   $env:PORT=8080; node server.js   # Windows PowerShell
   ```
 - Ensure `yt-dlp` is installed in the hosting environment for YouTube/Facebook video support. `ffmpeg` ships with the app via `ffmpeg-static`.
+- For Reddit, set `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` (see [Reddit Setup](#-reddit-setup)).
 - Sessions are kept in memory only (see below), so a restart clears any connected Instagram session — by design.
+
+---
+
+## 👽 Reddit Setup
+
+Reddit blocks anonymous server-side access, so OmniSave uses Reddit's official **OAuth API**. Create a free app once:
+
+1. Log in to Reddit and go to **<https://www.reddit.com/prefs/apps>**.
+2. Click **"are you a developer? create an app…"** at the bottom.
+3. Fill in:
+   - **name:** `OmniSave` (anything)
+   - **type:** select **`script`**
+   - **redirect uri:** `http://localhost:55964` (required field; not actually used)
+4. Click **Create app**. You'll now see:
+   - The **client ID** — the short string just under the app name (e.g. `p-Xa1bC2d3...`).
+   - The **secret** — labeled `secret`.
+5. Provide them to the server as environment variables before starting it:
+
+   **Windows (PowerShell):**
+   ```powershell
+   $env:REDDIT_CLIENT_ID="your_client_id"
+   $env:REDDIT_CLIENT_SECRET="your_secret"
+   npm start
+   ```
+   **macOS/Linux:**
+   ```bash
+   REDDIT_CLIENT_ID="your_client_id" REDDIT_CLIENT_SECRET="your_secret" npm start
+   ```
+   On hosting platforms (Render, Railway, etc.), add both as environment variables in the dashboard.
+
+> Without these variables, the Reddit tab returns a clear "not configured" message; every other downloader keeps working normally. The credentials authenticate the *app*, not any user — no Reddit login is involved, and nothing is posted on your behalf.
 
 ---
 
@@ -114,10 +152,10 @@ To access content from private Instagram accounts you follow:
 You can link straight to a section:
 
 - `/#how-it-works` — the guide
-- `/#instagram`, `/#youtube`, `/#facebook`, `/#snapchat` — open a specific downloader
+- `/#instagram`, `/#youtube`, `/#facebook`, `/#snapchat`, `/#reddit` — open a specific downloader
 
 ---
 
 ## ⚠️ Disclaimer
 
-This application is intended for **personal and educational use only**. It is not affiliated with, endorsed, or sponsored by Instagram, YouTube, Meta Platforms, Inc., or Snap Inc. All trademarks belong to their respective owners. Please respect copyright and privacy laws when downloading content.
+This application is intended for **personal and educational use only**. It is not affiliated with, endorsed, or sponsored by Instagram, YouTube, Meta Platforms, Inc., Snap Inc., or Reddit Inc. All trademarks belong to their respective owners. Please respect copyright and privacy laws when downloading content.
