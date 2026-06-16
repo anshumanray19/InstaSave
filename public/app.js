@@ -119,14 +119,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const yearEl = document.getElementById('footerYear');
     if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-    // Deep links: #how-it-works opens the guide, #instagram etc. open a downloader
+    // Deep links: #how-it-works / #privacy / #terms open a page, #instagram etc. open a downloader
     const routeFromHash = () => {
         const h = (location.hash || '').replace('#', '').toLowerCase();
         if (h === 'how-it-works') showHowItWorks();
+        else if (h === 'privacy') showPrivacy();
+        else if (h === 'terms') showTerms();
         else if (['instagram', 'youtube', 'facebook', 'snapchat'].includes(h)) openDownloader(h);
     };
     routeFromHash();
     window.addEventListener('hashchange', routeFromHash);
+
+    // Close the mobile menu on Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeMobileMenu();
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -2036,15 +2043,15 @@ function showHomepage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// Open the global "How It Works" page from anywhere (footer, homepage, etc.)
-function showHowItWorks() {
-    // It's a standalone page now — hide the Instagram-only sub nav & session UI
+// Show a standalone content page (howto / privacy / terms) — hides the
+// Instagram-only sub nav & session UI, then activates the requested tab.
+function showStandaloneTab(tabId) {
     document.getElementById('tabNav').style.display = 'none';
     document.getElementById('sessionBadge').style.display = 'none';
     document.getElementById('btnSession').style.display = 'none';
 
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    const target = document.getElementById('tab-howto');
+    const target = document.getElementById(tabId);
     if (target) {
         target.classList.add('active');
         target.style.animation = 'none';
@@ -2052,6 +2059,41 @@ function showHowItWorks() {
         target.style.animation = '';
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Open the global "How It Works" page from anywhere (footer, homepage, etc.)
+function showHowItWorks() { showStandaloneTab('tab-howto'); }
+function showPrivacy()    { showStandaloneTab('tab-privacy'); }
+function showTerms()      { showStandaloneTab('tab-terms'); }
+
+// ─── Mobile slide-out menu ──────────────────────────────────────
+function toggleMobileMenu() {
+    const isOpen = document.body.classList.toggle('menu-open');
+    const btn = document.getElementById('menuToggle');
+    if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+}
+
+function closeMobileMenu() {
+    document.body.classList.remove('menu-open');
+    const btn = document.getElementById('menuToggle');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+// Route a mobile-menu tap to the right view, then close the drawer
+function navMobile(target) {
+    switch (target) {
+        case 'home': showHomepage(); break;
+        case 'howto': showHowItWorks(); break;
+        case 'privacy': showPrivacy(); break;
+        case 'terms': showTerms(); break;
+        case 'instagram':
+        case 'youtube':
+        case 'facebook':
+        case 'snapchat':
+            openDownloader(target);
+            break;
+    }
+    closeMobileMenu();
 }
 
 function openDownloader(platform) {

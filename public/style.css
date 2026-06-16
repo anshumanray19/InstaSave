@@ -267,6 +267,164 @@ body {
     color: var(--ig-pink);
 }
 
+/* ─── Mobile hamburger + slide-out menu ────────────────────── */
+.menu-toggle {
+    display: none;            /* shown on mobile via media query */
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 42px;
+    height: 42px;
+    padding: 0 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.menu-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.menu-toggle-bar {
+    display: block;
+    width: 100%;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--text-primary);
+    transition: var(--transition-fast);
+}
+
+/* Animate to an X when open */
+body.menu-open .menu-toggle .menu-toggle-bar:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+}
+body.menu-open .menu-toggle .menu-toggle-bar:nth-child(2) {
+    opacity: 0;
+}
+body.menu-open .menu-toggle .menu-toggle-bar:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+}
+
+.mobile-menu-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--transition-fast), visibility var(--transition-fast);
+}
+
+body.menu-open .mobile-menu-overlay {
+    opacity: 1;
+    visibility: visible;
+}
+
+.mobile-menu {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 201;
+    width: 290px;
+    max-width: 84vw;
+    height: 100%;
+    padding: 18px 16px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    background: linear-gradient(180deg, rgba(18, 18, 26, 0.98), rgba(10, 10, 15, 0.98));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-left: 1px solid var(--glass-border);
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.5);
+    transform: translateX(105%);
+    transition: transform var(--transition-smooth);
+}
+
+body.menu-open .mobile-menu {
+    transform: translateX(0);
+}
+
+.mobile-menu-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px 14px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.mobile-menu-brand {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+}
+
+.mobile-menu-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.mobile-menu-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.mobile-menu-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    padding: 14px 12px 6px;
+}
+
+.mobile-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 12px;
+    border-radius: 12px;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.mobile-menu-item svg {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: var(--transition-fast);
+}
+
+.mobile-menu-item:hover,
+.mobile-menu-item:active {
+    background: var(--gradient-accent-soft);
+    color: var(--text-primary);
+}
+
+.mobile-menu-item:hover svg {
+    color: var(--accent-2);
+}
+
 /* ─── Tab Navigation ───────────────────────────────────────── */
 .tab-nav {
     position: sticky;
@@ -1440,6 +1598,89 @@ body {
     margin-bottom: 28px;
 }
 
+/* ─── Legal pages (Privacy / Terms) ────────────────────────── */
+.legal-hero {
+    margin-bottom: 24px;
+}
+
+.legal-updated {
+    margin-top: 10px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.legal-doc {
+    padding: 36px 34px;
+    margin-bottom: 36px;
+    animation: fadeInUp 0.6s ease-out both;
+}
+
+.legal-doc h2 {
+    font-size: 1.08rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 26px 0 10px;
+}
+
+.legal-doc h2:first-child {
+    margin-top: 0;
+}
+
+.legal-doc p {
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.legal-doc ul {
+    list-style: none;
+    margin: 0 0 14px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.legal-doc li {
+    position: relative;
+    padding-left: 22px;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.legal-doc li::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 9px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(124, 92, 255, 0.6);
+}
+
+.legal-doc strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.legal-doc em {
+    color: var(--accent-2);
+    font-style: normal;
+}
+
+.legal-doc code {
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.82em;
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--accent-2);
+}
+
 .howto-eyebrow {
     display: inline-block;
     padding: 5px 14px;
@@ -2332,6 +2573,11 @@ a.footer-link:hover {
 
 /* ─── Responsive ────────────────────────────────────────────── */
 @media (max-width: 768px) {
+    /* Show the hamburger menu on mobile/tablet */
+    .menu-toggle {
+        display: flex;
+    }
+
     .platform-howto-grid {
         grid-template-columns: 1fr;
     }
@@ -2387,6 +2633,10 @@ a.footer-link:hover {
 
     .main {
         padding: 24px 14px 40px;
+    }
+
+    .legal-doc {
+        padding: 26px 20px;
     }
 
     .btn-fetch-text {
