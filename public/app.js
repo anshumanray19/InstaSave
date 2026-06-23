@@ -3091,3 +3091,44 @@ function registerNotification() {
     closeInfoModal();
     showToast('✅', "You're registered! We'll notify you on launch.");
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+//  PASTE BUTTON FUNCTIONALITY
+// ═══════════════════════════════════════════════════════════════
+
+async function pasteFromClipboard(inputId) {
+    try {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+
+        // Read text from clipboard
+        const text = await navigator.clipboard.readText();
+        
+        if (text && text.trim()) {
+            input.value = text.trim();
+            
+            // Visual feedback - animate the input wrapper
+            const wrapper = input.parentElement;
+            wrapper.style.borderColor = 'rgba(124, 92, 255, 0.6)';
+            wrapper.style.boxShadow = '0 0 0 3px rgba(124, 92, 255, 0.15)';
+            
+            setTimeout(() => {
+                wrapper.style.borderColor = '';
+                wrapper.style.boxShadow = '';
+            }, 800);
+            
+            // Focus the input
+            input.focus();
+            
+            // Show toast notification
+            showToast('📋', 'Pasted from clipboard');
+        } else {
+            showToast('⚠️', 'Clipboard is empty');
+        }
+    } catch (err) {
+        console.error('Clipboard read failed:', err);
+        // Fallback for browsers that don't support clipboard API or when permission is denied
+        showToast('❌', 'Cannot access clipboard. Please paste manually (Ctrl+V)');
+    }
+}
