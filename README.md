@@ -54,10 +54,6 @@
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (v18+ recommended).
-- **`yt-dlp`** on your `PATH` (required for YouTube & Facebook video downloads):
-  - Windows: `pip install yt-dlp` or drop `yt-dlp.exe` in the project folder.
-  - macOS/Linux: `pip install yt-dlp` or `brew install yt-dlp`.
-- **ffmpeg** is bundled automatically via the `ffmpeg-static` npm package — no separate install needed.
 
 ### Installation
 
@@ -71,33 +67,68 @@
    npm install
    ```
 
-### Running the Application
+### Local Development
 
+#### Option 1: Development Mode (Frontend Only)
+For testing Instagram features only:
 ```bash
-npm start
+npm run dev
 ```
-*Or directly:*
+Open `http://localhost:55964`
+
+#### Option 2: Full Stack Development
+For testing all features including YouTube/Reddit:
+
+**Terminal 1 - Frontend:**
 ```bash
-node server.js
+npm run dev
 ```
 
-The application runs at **`http://localhost:55964`**. Open this URL in your browser.
+**Terminal 2 - Backend (Heavy Operations):**
+```bash
+npm run backend
+```
+
+The frontend will automatically connect to the local backend.
 
 ---
 
-## 🌐 Hosting / Deployment
+## 🌐 Deployment
 
-- The server listens on **port `55964`** by default.
-- The port is overridable with the `PORT` environment variable, so platforms that inject their own port (Render, Railway, Heroku, etc.) work automatically:
-  ```bash
-  PORT=8080 node server.js     # macOS/Linux
-  ```
-  ```powershell
-  $env:PORT=8080; node server.js   # Windows PowerShell
-  ```
-- Ensure `yt-dlp` is installed in the hosting environment for YouTube/Facebook video support. `ffmpeg` ships with the app via `ffmpeg-static`.
-- For Reddit, set `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` (see [Reddit Setup](#-reddit-setup)).
-- Sessions are kept in memory only (see below), so a restart clears any connected Instagram session — by design.
+This app uses a split architecture for optimal performance:
+- **Vercel**: Hosts frontend + lightweight Instagram API
+- **Railway/Render**: Hosts backend for heavy operations (YouTube, FFmpeg)
+
+### Quick Deploy (10 minutes)
+
+See **[QUICK_DEPLOY.md](./QUICK_DEPLOY.md)** for step-by-step instructions.
+
+### Detailed Deployment Guide
+
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for comprehensive deployment options including:
+- Railway (recommended)
+- Render
+- Heroku
+- Self-hosted VPS
+
+---
+
+## 📦 Architecture
+
+```
+Frontend (Vercel)
+  ├─ Static files (HTML, CSS, JS)
+  ├─ /api/login - Session management
+  ├─ /api/logout - Session cleanup
+  ├─ /api/session-status - Auth check
+  └─ /api/fetch-public - Instagram lightweight API
+
+Backend Server (Railway/Render/VPS)
+  ├─ /api/youtube/download - Video downloads with yt-dlp
+  ├─ /api/youtube/info - Video metadata
+  ├─ /api/reddit/download - Video + audio merging with FFmpeg
+  └─ /api/proxy - CORS bypass for media
+```
 
 ---
 

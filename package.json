@@ -6,7 +6,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "build": "node build.js"
+    "build": "node build.js",
+    "backend": "node backend-server.js",
+    "vercel-build": "echo 'Build complete'",
+    "test:backend": "curl http://localhost:3001/health",
+    "test:local": "node test-deployment.js local",
+    "test:production": "node test-deployment.js production",
+    "deploy": "vercel --prod"
   },
   "dependencies": {
     "cors": "^2.8.5",

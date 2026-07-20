@@ -1,0 +1,22 @@
+# Backend server (not needed on Vercel)
+backend-server.js
+
+# Test files
+test_*.js
+debug_output*.txt
+
+# Development
+node_modules
+.env.local
+.git
+
+# Build artifacts
+dist
+
+# Documentation for backend deployment
+DEPLOYMENT.md
+railway.toml
+render.yaml
+
+# Old server (will use serverless functions)
+server.js
